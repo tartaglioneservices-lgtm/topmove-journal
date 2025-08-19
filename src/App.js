@@ -346,6 +346,8 @@ const TradingJournalSupabase = () => {
             quantity: parseInt(trade.Quantity) || 1,
             entry_price: parseFloat(trade.EntryPrice) || 0,
             exit_price: parseFloat(trade.ExitPrice) || 0,
+            stop_loss: parseFloat(trade.StopLoss || trade.SL) || null,
+            take_profit: parseFloat(trade.TakeProfit || trade.TP) || null,
             pnl: parseFloat(trade.PnL) || Math.random() * 1000 - 500,
             rating: null,
             comment: '',
@@ -562,10 +564,10 @@ const TradingJournalSupabase = () => {
 
   const exportFiscal = () => {
     const csvContent = trades.map(t => 
-      `${t.date},${t.symbol},${t.side},${t.quantity},${t.entry_price},${t.exit_price},${t.pnl},${commissions[t.symbol] || 0}`
+      `${t.date},${t.symbol},${t.side},${t.quantity},${t.entry_price},${t.stop_loss || ''},${t.take_profit || ''},${t.exit_price},${t.pnl},${commissions[t.symbol] || 0}`
     ).join('\n');
     
-    const blob = new Blob([`Date,Symbol,Side,Qty,Entry,Exit,P&L,Commission\n${csvContent}`], 
+    const blob = new Blob([`Date,Symbol,Side,Qty,Entry,SL,TP,Exit,P&L,Commission\n${csvContent}`], 
       { type: 'text/csv' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
@@ -1274,6 +1276,10 @@ const TradingJournalSupabase = () => {
                       <th className="text-left p-2">Symbol</th>
                       <th className="text-left p-2">Side</th>
                       <th className="text-left p-2">Qty</th>
+                      <th className="text-left p-2">Entry</th>
+                      <th className="text-left p-2">SL</th>
+                      <th className="text-left p-2">TP</th>
+                      <th className="text-left p-2">Exit</th>
                       <th className="text-left p-2">P&L</th>
                       <th className="text-left p-2">Note</th>
                       <th className="text-left p-2">Commentaire</th>
@@ -1289,6 +1295,44 @@ const TradingJournalSupabase = () => {
                         <td className="p-2 text-sm">{trade.symbol}</td>
                         <td className="p-2 text-sm">{trade.side}</td>
                         <td className="p-2 text-sm">{trade.quantity}</td>
+                        <td className="p-2 text-sm">
+                          <input
+                            type="number"
+                            value={trade.entry_price || ''}
+                            onChange={(e) => updateTrade(trade.id, { entry_price: parseFloat(e.target.value) || 0 })}
+                            className={`w-20 px-1 py-1 text-xs rounded ${isDark ? 'bg-gray-700' : 'bg-gray-100'}`}
+                            step="0.01"
+                          />
+                        </td>
+                        <td className="p-2 text-sm">
+                          <input
+                            type="number"
+                            value={trade.stop_loss || ''}
+                            onChange={(e) => updateTrade(trade.id, { stop_loss: parseFloat(e.target.value) || null })}
+                            className={`w-20 px-1 py-1 text-xs rounded ${isDark ? 'bg-gray-700' : 'bg-gray-100'}`}
+                            placeholder="SL"
+                            step="0.01"
+                          />
+                        </td>
+                        <td className="p-2 text-sm">
+                          <input
+                            type="number"
+                            value={trade.take_profit || ''}
+                            onChange={(e) => updateTrade(trade.id, { take_profit: parseFloat(e.target.value) || null })}
+                            className={`w-20 px-1 py-1 text-xs rounded ${isDark ? 'bg-gray-700' : 'bg-gray-100'}`}
+                            placeholder="TP"
+                            step="0.01"
+                          />
+                        </td>
+                        <td className="p-2 text-sm">
+                          <input
+                            type="number"
+                            value={trade.exit_price || ''}
+                            onChange={(e) => updateTrade(trade.id, { exit_price: parseFloat(e.target.value) || 0 })}
+                            className={`w-20 px-1 py-1 text-xs rounded ${isDark ? 'bg-gray-700' : 'bg-gray-100'}`}
+                            step="0.01"
+                          />
+                        </td>
                         <td className={`p-2 text-sm font-bold ${trade.pnl >= 0 ? 'text-green-500' : 'text-red-500'}`}>
                           ${parseFloat(trade.pnl || 0).toFixed(2)}
                         </td>
