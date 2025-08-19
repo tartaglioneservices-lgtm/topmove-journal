@@ -40,10 +40,10 @@ const TradingJournalSupabase = () => {
 
   // Questions psychologiques
   const psychQuestions = [
-    { id: 'fatigue', question: 'Êtes-vous fatigué ?', reversed: true },
     { id: 'emotion', question: 'Vous sentez-vous bien émotionnellement ?' },
     { id: 'focus', question: 'Êtes-vous concentré ?' },
-    { id: 'stress', question: 'Êtes-vous stressé ?', reversed: true },
+    { id: 'form', question: 'Êtes-vous en forme ?' },
+    { id: 'relaxed', question: 'Êtes-vous détendu ?' },
     { id: 'confidence', question: 'Êtes-vous confiant ?' }
   ];
 
@@ -280,6 +280,28 @@ const TradingJournalSupabase = () => {
     }
   };
 
+  // Supprimer un trade
+  const deleteTrade = async (tradeId) => {
+    if (!window.confirm('Êtes-vous sûr de vouloir supprimer ce trade ?')) {
+      return;
+    }
+
+    try {
+      const { error } = await supabase
+        .from('trades')
+        .delete()
+        .eq('id', tradeId)
+        .eq('user_id', currentUser.id);
+
+      if (error) throw error;
+      
+      // Mettre à jour localement
+      setTrades(prev => prev.filter(t => t.id !== tradeId));
+    } catch (error) {
+      console.error('Erreur suppression trade:', error);
+    }
+  };
+
   // Sauvegarder les paramètres
   const saveSettings = async () => {
     if (!currentUser) return;
@@ -312,28 +334,53 @@ const TradingJournalSupabase = () => {
         const lines = csv.split('\n');
         const headers = lines[0].split(',');
         
-        const newTrades = lines.slice(1).filter(line => line.trim()).map((line, idx) => {
-          const values = line.split(',');
-          const trade = {};
-          headers.forEach((header, i) => {
-            trade[header.trim()] = values[i]?.trim();
+        const newTrades = lines.slice(1)
+          .filter(line => line.trim())
+          .map((line, idx) => {
+            const values = line.split(',');
+            const trade = {};
+            headers.forEach((header, i) => {
+              trade[header.trim()] = values[i]?.trim();
+            });
+            return trade;
+          })
+          .filter(trade => {
+            // Ne garder que les ordres "Filled"
+            return trade.Status && trade.Status.toLowerCase() === 'filled';
+          })
+          .map(trade => {
+            let pnl = parseFloat(trade.PnL) || 0;
+            
+            // Correction spéciale pour MGC qui rapporte 1$ par tick
+            if (trade.Symbol === 'MGC') {
+              // Convertir les ticks en dollars pour MGC
+              const entryPrice = parseFloat(trade.EntryPrice) || 0;
+              const exitPrice = parseFloat(trade.ExitPrice) || 0;
+              const quantity = parseInt(trade.Quantity) || 1;
+              const tickDifference = Math.abs(exitPrice - entryPrice);
+              
+              if (trade.Side === 'Long') {
+                pnl = (exitPrice - entryPrice) * quantity;
+              } else {
+                pnl = (entryPrice - exitPrice) * quantity;
+              }
+            }
+            
+            return {
+              date: trade.Date || new Date().toISOString(),
+              symbol: trade.Symbol || 'ES',
+              side: trade.Side || 'Long',
+              quantity: parseInt(trade.Quantity) || 1,
+              entry_price: parseFloat(trade.EntryPrice) || 0,
+              exit_price: parseFloat(trade.ExitPrice) || 0,
+              pnl: pnl,
+              rating: null,
+              comment: '',
+              grouped: false,
+              execution_time: trade.ExecutionTime || new Date().toISOString(),
+              user_id: currentUser.id
+            };
           });
-          
-          return {
-            date: trade.Date || new Date().toISOString(),
-            symbol: trade.Symbol || 'ES',
-            side: trade.Side || 'Long',
-            quantity: parseInt(trade.Quantity) || 1,
-            entry_price: parseFloat(trade.EntryPrice) || 0,
-            exit_price: parseFloat(trade.ExitPrice) || 0,
-            pnl: parseFloat(trade.PnL) || Math.random() * 1000 - 500,
-            rating: null,
-            comment: '',
-            grouped: false,
-            execution_time: trade.ExecutionTime || new Date().toISOString(),
-            user_id: currentUser.id
-          };
-        });
 
         // Grouper les trades copiés
         const grouped = newTrades.reduce((acc, trade) => {
@@ -750,21 +797,6 @@ const TradingJournalSupabase = () => {
         </div>
       )}
 
-      {/* Score psychologique */}
-      {psychScore !== null && (
-        <div className={`fixed top-20 left-4 ${cardClass} p-4 rounded-lg shadow-lg z-40`}>
-          <div className="flex items-center gap-3">
-            <Brain className={psychScore > 3 ? 'text-green-500' : psychScore > 2 ? 'text-yellow-500' : 'text-red-500'} />
-            <div>
-              <p className="text-sm opacity-70">État mental</p>
-              <p className="font-bold">
-                {psychScore > 3 ? 'Bon' : psychScore > 2 ? 'Neutre' : 'Mauvais'}
-              </p>
-            </div>
-          </div>
-        </div>
-      )}
-
       {/* Navigation */}
       <nav className={`${cardClass} border-b ${borderClass} px-4 py-2`}>
         <div className="flex gap-2 overflow-x-auto">
@@ -930,15 +962,23 @@ const TradingJournalSupabase = () => {
 
             <div className={`${cardClass} p-6 rounded-xl border ${borderClass} md:col-span-2 lg:col-span-3`}>
               <h3 className="text-sm opacity-70 mb-4">Courbe de P&L</h3>
-              <div className="h-48 flex items-end gap-1">
+              <div className="h-32 max-h-32 flex items-end gap-1 overflow-hidden">
                 {trades.length > 0 ? trades.slice(-30).map((trade, idx) => {
                   const cumPL = trades.slice(0, trades.indexOf(trade) + 1)
                     .reduce((sum, t) => sum + parseFloat(t.pnl || 0), 0);
+                  const maxPL = Math.max(...trades.map((_, i) => 
+                    trades.slice(0, i + 1).reduce((sum, t) => sum + parseFloat(t.pnl || 0), 0)
+                  ));
+                  const minPL = Math.min(...trades.map((_, i) => 
+                    trades.slice(0, i + 1).reduce((sum, t) => sum + parseFloat(t.pnl || 0), 0)
+                  ));
+                  const range = Math.max(Math.abs(maxPL), Math.abs(minPL));
+                  
                   return (
                     <div
                       key={idx}
                       className={`flex-1 ${cumPL >= 0 ? 'bg-green-500' : 'bg-red-500'} rounded-t`}
-                      style={{ height: `${Math.abs(cumPL) / Math.max(...trades.map(t => Math.abs(t.pnl))) * 100}%` }}
+                      style={{ height: `${Math.min(Math.abs(cumPL) / (range || 1) * 100, 100)}%` }}
                     />
                   );
                 }) : (
@@ -1239,6 +1279,7 @@ const TradingJournalSupabase = () => {
                       <th className="text-left p-2">P&L</th>
                       <th className="text-left p-2">Note</th>
                       <th className="text-left p-2">Commentaire</th>
+                      <th className="text-left p-2">Actions</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -1274,6 +1315,15 @@ const TradingJournalSupabase = () => {
                             className={`px-2 py-1 rounded ${isDark ? 'bg-gray-700' : 'bg-gray-100'} text-sm`}
                             placeholder="Ajouter un commentaire..."
                           />
+                        </td>
+                        <td className="p-2">
+                          <button
+                            onClick={() => deleteTrade(trade.id)}
+                            className="p-1 text-red-500 hover:bg-red-500/20 rounded"
+                            title="Supprimer ce trade"
+                          >
+                            <XCircle size={16} />
+                          </button>
                         </td>
                       </tr>
                     ))}
@@ -1419,34 +1469,11 @@ const TradingJournalSupabase = () => {
           <div className={`${cardClass} rounded-xl p-6 max-w-2xl mx-auto`}>
             <h2 className="text-xl font-bold mb-6">Évaluation Psychologique</h2>
             
-            <div className="space-y-4">
-              {psychQuestions.map(q => (
-                <div key={q.id} className="space-y-2">
-                  <p className="text-sm">{q.question}</p>
-                  <div className="flex gap-2">
-                    {[1,2,3,4,5].map(value => {
-                      const actualValue = q.reversed ? 6 - value : value;
-                      return (
-                        <button
-                          key={value}
-                          onClick={() => setPsychAnswers(prev => ({...prev, [q.id]: actualValue}))}
-                          className={`flex-1 py-2 rounded ${
-                            psychAnswers[q.id] === actualValue ? 'bg-blue-500' : 'bg-gray-700 hover:bg-gray-600'
-                          }`}
-                        >
-                          {value === 1 ? '😟' : value === 2 ? '😐' : value === 3 ? '😊' : value === 4 ? '😄' : '🚀'}
-                        </button>
-                      );
-                    })}
-                  </div>
-                </div>
-              ))}
-            </div>
-
+            {/* Affichage du score psychologique */}
             {psychScore !== null && (
-              <div className="mt-6 p-4 rounded-lg bg-gray-700">
+              <div className="mb-6 p-4 rounded-lg bg-gray-700">
                 <div className="flex items-center justify-between">
-                  <span>Score Global:</span>
+                  <span>État Mental Global:</span>
                   <div className="flex items-center gap-2">
                     {psychScore > 3 ? <CheckCircle className="text-green-500" /> :
                      psychScore > 2 ? <AlertCircle className="text-yellow-500" /> :
@@ -1455,9 +1482,12 @@ const TradingJournalSupabase = () => {
                       psychScore > 3 ? 'text-green-500' : 
                       psychScore > 2 ? 'text-yellow-500' : 'text-red-500'
                     }`}>
-                      {psychScore > 3 ? 'BON' : psychScore > 2 ? 'NEUTRE' : 'MAUVAIS'}
+                      {psychScore > 3 ? 'EXCELLENT' : psychScore > 2 ? 'NEUTRE' : 'MAUVAIS'}
                     </span>
                   </div>
+                </div>
+                <div className="mt-2 text-sm opacity-70">
+                  Score: {psychScore.toFixed(1)}/5
                 </div>
                 {psychScore <= 2 && (
                   <p className="text-sm text-red-400 mt-2">
@@ -1466,6 +1496,31 @@ const TradingJournalSupabase = () => {
                 )}
               </div>
             )}
+            
+            <div className="space-y-4">
+              {psychQuestions.map(q => (
+                <div key={q.id} className="space-y-2">
+                  <p className="text-sm">{q.question}</p>
+                  <div className="flex gap-2">
+                    {[1,2,3,4,5].map(value => (
+                      <button
+                        key={value}
+                        onClick={() => setPsychAnswers(prev => ({...prev, [q.id]: value}))}
+                        className={`flex-1 py-3 rounded text-lg font-bold ${
+                          psychAnswers[q.id] === value ? 'bg-blue-500 text-white' : 'bg-gray-700 hover:bg-gray-600'
+                        }`}
+                      >
+                        {value}
+                      </button>
+                    ))}
+                  </div>
+                  <div className="flex justify-between text-xs opacity-70">
+                    <span>Pas du tout</span>
+                    <span>Complètement</span>
+                  </div>
+                </div>
+              ))}
+            </div>
           </div>
         )}
 
