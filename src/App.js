@@ -330,116 +330,27 @@ const TradingJournalSupabase = () => {
     const reader = new FileReader();
     reader.onload = async (event) => {
       try {
-        const csv = event.target.result;
-        console.log('Contenu CSV (premiers 200 caractères):', csv.substring(0, 200));
+        const content = event.target.result;
+        console.log('Contenu du fichier (premiers 300 caractères):', content.substring(0, 300));
         
-        if (!csv || csv.trim() === '') {
-          alert('Le fichier CSV est vide');
+        if (!content || content.trim() === '') {
+          alert('Le fichier est vide');
           return;
         }
 
-        const lines = csv.split('\n').filter(line => line.trim());
-        console.log('Nombre de lignes:', lines.length);
+        // Détecter si c'est un fichier d'ordres de trading
+        const isOrdersFile = content.includes('Entry Time') && content.includes('Internal Order ID') && content.includes('Buy/Sell');
         
-        if (lines.length < 2) {
-          alert('Le fichier CSV doit contenir au moins une ligne d\'en-tête et une ligne de données');
-          return;
+        if (isOrdersFile) {
+          console.log('Fichier d\'ordres détecté - traitement spécialisé');
+          await handleOrdersFileImport(content);
+        } else {
+          console.log('Fichier CSV standard détecté');
+          await handleStandardCSVImport(content);
         }
-
-        // Détecter le séparateur (virgule ou point-virgule)
-        const separator = lines[0].includes(';') ? ';' : ',';
-        console.log('Séparateur détecté:', separator);
-
-        const headers = lines[0].split(separator).map(h => h.trim());
-        console.log('En-têtes détectés:', headers);
-        
-        const newTrades = [];
-        
-        for (let i = 1; i < lines.length; i++) {
-          const line = lines[i];
-          if (!line.trim()) continue;
-          
-          const values = line.split(separator).map(v => v.trim());
-          console.log(`Ligne ${i}:`, values);
-          
-          if (values.length < 3) continue; // Au minimum date, symbol, pnl
-          
-          const trade = {};
-          headers.forEach((header, idx) => {
-            trade[header] = values[idx] || '';
-          });
-          
-          // Mapping flexible des colonnes
-          const mappedTrade = {
-            date: trade.Date || trade.date || trade.Timestamp || new Date().toISOString(),
-            symbol: trade.Symbol || trade.symbol || trade.Instrument || 'ES',
-            side: trade.Side || trade.side || trade.Direction || 'Long',
-            quantity: parseInt(trade.Quantity || trade.quantity || trade.Size || trade.Qty || '1') || 1,
-            entry_price: parseFloat(trade.EntryPrice || trade.entry_price || trade.Entry || trade.Fill || '0') || 0,
-            exit_price: parseFloat(trade.ExitPrice || trade.exit_price || trade.Exit || '0') || 0,
-            stop_loss: parseFloat(trade.StopLoss || trade.stop_loss || trade.SL || trade.sl || '0') || null,
-            take_profit: parseFloat(trade.TakeProfit || trade.take_profit || trade.TP || trade.tp || '0') || null,
-            pnl: parseFloat(trade.PnL || trade.pnl || trade.PL || trade.Profit || '0') || 0,
-            rating: null,
-            comment: trade.Comment || trade.comment || '',
-            grouped: false,
-            execution_time: trade.ExecutionTime || trade.execution_time || trade.Time || new Date().toISOString(),
-            user_id: currentUser.id
-          };
-          
-          // Nettoyer les valeurs nulles pour stop_loss et take_profit
-          if (mappedTrade.stop_loss === 0) mappedTrade.stop_loss = null;
-          if (mappedTrade.take_profit === 0) mappedTrade.take_profit = null;
-          
-          console.log('Trade mappé:', mappedTrade);
-          newTrades.push(mappedTrade);
-        }
-
-        console.log('Nombre de trades à importer:', newTrades.length);
-
-        if (newTrades.length === 0) {
-          alert('Aucun trade valide trouvé dans le fichier CSV');
-          return;
-        }
-
-        // Grouper les trades copiés
-        const grouped = newTrades.reduce((acc, trade) => {
-          const key = trade.execution_time;
-          if (!acc[key]) acc[key] = [];
-          acc[key].push(trade);
-          return acc;
-        }, {});
-
-        Object.values(grouped).forEach(group => {
-          if (group.length > 1) {
-            group.forEach(t => t.grouped = true);
-          }
-        });
-
-        console.log('Insertion dans Supabase...');
-
-        // Sauvegarder dans Supabase
-        const { data, error } = await supabase
-          .from('trades')
-          .insert(newTrades)
-          .select();
-
-        if (error) {
-          console.error('Erreur Supabase:', error);
-          alert(`Erreur lors de la sauvegarde: ${error.message}`);
-          return;
-        }
-        
-        if (data) {
-          console.log('Trades sauvegardés:', data);
-          setTrades(prev => [...data, ...prev]);
-          alert(`${data.length} trades importés avec succès !`);
-        }
-        
-        checkRiskExposure(newTrades);
         
       } catch (error) {
-        console.error('Erreur import CSV:', error);
+        console.error('Erreur import:', error);
         alert(`Erreur lors de l'import: ${error.message}`);
       }
     };
@@ -449,6 +360,259 @@ const TradingJournalSupabase = () => {
     };
     
     reader.readAsText(file, 'UTF-8');
+  };
+
+  // Traitement spécialisé pour les fichiers d'ordres
+  const handleOrdersFileImport = async (content) => {
+    const lines = content.split('\n').filter(line => line.trim());
+    
+    if (lines.length < 2) {
+      alert('Fichier d\'ordres vide');
+      return;
+    }
+
+    console.log('Nombre de lignes d\'ordres:', lines.length);
+
+    // Parser les ordres
+    const orders = [];
+    
+    for (let i = 1; i < lines.length; i++) {
+      const line = lines[i].trim();
+      if (!line) continue;
+      
+      // Split par espaces/tabulations multiples
+      const parts = line.split(/\s+/);
+      
+      if (parts.length < 20) {
+        console.warn('Ligne trop courte ignorée:', i, parts.length);
+        continue;
+      }
+      
+      try {
+        const order = {
+          entryTime: `${parts[0]} ${parts[1]}`,
+          lastActivityTime: `${parts[2]} ${parts[3]}`,
+          symbol: parts[4],
+          status: parts[5],
+          internalOrderId: parts[6],
+          orderType: parts[7],
+          buySell: parts[8],
+          openClose: parts[9],
+          orderQuantity: parseInt(parts[10]) || 0,
+          price: parseFloat(parts[11]) || 0,
+          price2: parseFloat(parts[12]) || 0,
+          filledQuantity: parseInt(parts[13]) || 0,
+          avgFillPrice: parseFloat(parts[14]) || 0,
+          parentInternalOrderId: parts[15],
+          lineIndex: i
+        };
+        
+        console.log(`Ordre ${i}:`, order);
+        orders.push(order);
+        
+      } catch (e) {
+        console.error(`Erreur parsing ligne ${i}:`, e, parts);
+      }
+    }
+
+    console.log('Total ordres parsés:', orders.length);
+
+    // Grouper les ordres par trade
+    const trades = groupOrdersIntoTrades(orders);
+    
+    if (trades.length === 0) {
+      alert('Aucun trade complet trouvé dans les ordres');
+      return;
+    }
+
+    console.log('Trades créés:', trades);
+
+    // Sauvegarder dans Supabase
+    const { data, error } = await supabase
+      .from('trades')
+      .insert(trades)
+      .select();
+
+    if (error) {
+      console.error('Erreur Supabase:', error);
+      alert(`Erreur lors de la sauvegarde: ${error.message}`);
+      return;
+    }
+    
+    if (data) {
+      setTrades(prev => [...data, ...prev]);
+      alert(`${data.length} trade(s) importé(s) avec succès !`);
+    }
+  };
+
+  // Grouper les ordres en trades complets
+  const groupOrdersIntoTrades = (orders) => {
+    const trades = [];
+    
+    // Grouper par parentInternalOrderId ou par symbol+temps
+    const groups = {};
+    
+    orders.forEach(order => {
+      // Utiliser le parentInternalOrderId s'il existe, sinon grouper par symbol
+      let groupKey = order.parentInternalOrderId;
+      
+      if (!groupKey || groupKey === '0') {
+        // Si pas de parent ID, grouper par symbol et time (même minute)
+        const timeKey = order.entryTime.substring(0, 16); // YYYY-MM-DD HH:MM
+        groupKey = `${order.symbol}_${timeKey}`;
+      }
+      
+      if (!groups[groupKey]) {
+        groups[groupKey] = [];
+      }
+      groups[groupKey].push(order);
+    });
+
+    console.log('Groupes d\'ordres:', Object.keys(groups).length);
+
+    // Traiter chaque groupe pour créer un trade
+    Object.entries(groups).forEach(([groupKey, orderGroup]) => {
+      console.log(`Traitement groupe ${groupKey}:`, orderGroup);
+      
+      // Trouver les différents types d'ordres
+      const entryOrder = orderGroup.find(o => 
+        o.openClose === 'Open' && o.status === 'Filled'
+      );
+      
+      const exitOrder = orderGroup.find(o => 
+        o.openClose === 'Close' && o.status === 'Filled'
+      );
+      
+      // Trouver SL et TP (même s'ils sont annulés)
+      const stopOrder = orderGroup.find(o => 
+        o.orderType === 'Stop' || (o.orderType === 'Stop' && o.openClose === 'Close')
+      );
+      
+      const limitOrder = orderGroup.find(o => 
+        o.orderType === 'Limit' && o.openClose === 'Close'
+      );
+
+      console.log('Ordres identifiés:', {
+        entry: entryOrder?.internalOrderId,
+        exit: exitOrder?.internalOrderId,
+        stop: stopOrder?.internalOrderId,
+        limit: limitOrder?.internalOrderId
+      });
+
+      if (!entryOrder) {
+        console.warn('Pas d\'ordre d\'entrée trouvé pour le groupe:', groupKey);
+        return;
+      }
+
+      // Calculer le P&L si on a un exit
+      let pnl = 0;
+      if (exitOrder && entryOrder) {
+        const isLong = entryOrder.buySell === 'Buy';
+        const multiplier = isLong ? 1 : -1;
+        pnl = (exitOrder.avgFillPrice - entryOrder.avgFillPrice) * multiplier * entryOrder.filledQuantity;
+        
+        // Ajustement pour micro contrats
+        if (entryOrder.symbol.startsWith('M')) {
+          pnl = pnl / 10;
+        }
+      }
+
+      const trade = {
+        date: new Date(entryOrder.entryTime).toISOString(),
+        symbol: entryOrder.symbol.replace(/\.(COMEX|NYMEX|CBOT|CME)$/, ''),
+        side: entryOrder.buySell === 'Buy' ? 'Long' : 'Short',
+        quantity: entryOrder.filledQuantity,
+        entry_price: entryOrder.avgFillPrice,
+        exit_price: exitOrder ? exitOrder.avgFillPrice : null,
+        stop_loss: stopOrder ? stopOrder.price : null,
+        take_profit: limitOrder ? limitOrder.price : null,
+        pnl: pnl,
+        rating: null,
+        comment: `Import: ${orderGroup.length} ordres (${orderGroup.map(o => o.status).join(', ')})`,
+        grouped: false,
+        execution_time: entryOrder.entryTime,
+        user_id: currentUser.id
+      };
+
+      console.log('Trade créé:', trade);
+      trades.push(trade);
+    });
+
+    return trades;
+  };
+
+  // Traitement CSV standard (comme avant)
+  const handleStandardCSVImport = async (csv) => {
+    const lines = csv.split('\n').filter(line => line.trim());
+    
+    if (lines.length < 2) {
+      alert('Le fichier CSV doit contenir au moins une ligne d\'en-tête et une ligne de données');
+      return;
+    }
+
+    const separator = lines[0].includes(';') ? ';' : ',';
+    const headers = lines[0].split(separator).map(h => h.trim());
+    console.log('En-têtes CSV détectés:', headers);
+    
+    const newTrades = [];
+    
+    for (let i = 1; i < lines.length; i++) {
+      const line = lines[i];
+      if (!line.trim()) continue;
+      
+      const values = line.split(separator).map(v => v.trim());
+      
+      if (values.length < 3) continue;
+      
+      const trade = {};
+      headers.forEach((header, idx) => {
+        trade[header] = values[idx] || '';
+      });
+      
+      const mappedTrade = {
+        date: trade.Date || trade.date || trade.Timestamp || new Date().toISOString(),
+        symbol: trade.Symbol || trade.symbol || trade.Instrument || 'ES',
+        side: trade.Side || trade.side || trade.Direction || 'Long',
+        quantity: parseInt(trade.Quantity || trade.quantity || trade.Size || trade.Qty || '1') || 1,
+        entry_price: parseFloat(trade.EntryPrice || trade.entry_price || trade.Entry || trade.Fill || '0') || 0,
+        exit_price: parseFloat(trade.ExitPrice || trade.exit_price || trade.Exit || '0') || 0,
+        stop_loss: parseFloat(trade.StopLoss || trade.stop_loss || trade.SL || trade.sl || '0') || null,
+        take_profit: parseFloat(trade.TakeProfit || trade.take_profit || trade.TP || trade.tp || '0') || null,
+        pnl: parseFloat(trade.PnL || trade.pnl || trade.PL || trade.Profit || '0') || 0,
+        rating: null,
+        comment: trade.Comment || trade.comment || '',
+        grouped: false,
+        execution_time: trade.ExecutionTime || trade.execution_time || trade.Time || new Date().toISOString(),
+        user_id: currentUser.id
+      };
+      
+      if (mappedTrade.stop_loss === 0) mappedTrade.stop_loss = null;
+      if (mappedTrade.take_profit === 0) mappedTrade.take_profit = null;
+      
+      newTrades.push(mappedTrade);
+    }
+
+    if (newTrades.length === 0) {
+      alert('Aucun trade valide trouvé dans le fichier CSV');
+      return;
+    }
+
+    // Sauvegarder dans Supabase
+    const { data, error } = await supabase
+      .from('trades')
+      .insert(newTrades)
+      .select();
+
+    if (error) {
+      console.error('Erreur Supabase:', error);
+      alert(`Erreur lors de la sauvegarde: ${error.message}`);
+      return;
+    }
+    
+    if (data) {
+      setTrades(prev => [...data, ...prev]);
+      alert(`${data.length} trades importés avec succès !`);
+    }
   };
 
   // Métriques de trading
