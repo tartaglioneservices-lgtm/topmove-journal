@@ -100,7 +100,11 @@ const TradingJournalSupabase = () => {
         .eq('user_id', userId)
         .order('date', { ascending: false });
       
-      if (tradesData) setTrades(tradesData);
+      if (tradesData) {
+        setTrades(tradesData);
+        // Recalculer le capital avec tous les trades existants
+        setTimeout(() => recalculateCapital(tradesData), 100);
+      }
 
       // Charger le journal
       const { data: journalData } = await supabase
@@ -926,6 +930,20 @@ const TradingJournalSupabase = () => {
       ...prev,
       currentCapital: prev.currentCapital + totalPnL
     }));
+  };
+
+  // Fonction pour recalculer le capital total basé sur tous les trades
+  const recalculateCapital = (allTrades) => {
+    const totalPnL = allTrades.reduce((sum, trade) => sum + (parseFloat(trade.pnl) || 0), 0);
+    setCapitalSettings(prev => ({
+      ...prev,
+      currentCapital: prev.initialCapital + totalPnL
+    }));
+    console.log('Capital recalculé:', {
+      initial: capitalSettings.initialCapital,
+      totalPnL,
+      current: capitalSettings.initialCapital + totalPnL
+    });
   };
 
   // Fonctions helper
@@ -2465,6 +2483,13 @@ const TradingJournalSupabase = () => {
                       }))}
                       className={`flex-1 p-2 rounded ${isDark ? 'bg-gray-700' : 'bg-gray-100'}`}
                     />
+                    <button
+                      onClick={() => recalculateCapital(trades)}
+                      className="px-3 py-2 bg-green-500 text-white rounded hover:bg-green-600 text-xs"
+                      title="Recalculer basé sur tous les trades"
+                    >
+                      🔄 Recalculer
+                    </button>
                   </div>
                   <div className="flex items-center gap-2">
                     <label className="text-sm w-32">Risque journalier (%):</label>
