@@ -500,6 +500,8 @@ const TradingJournalSupabase = () => {
         groupKey = `${order.symbol}_${timeKey}`;
       }
       
+      console.log(`Ordre ${order.internalOrderId} assigné au groupe: ${groupKey} (parent: ${order.parentInternalOrderId})`);
+      
       if (!groups[groupKey]) {
         groups[groupKey] = [];
       }
@@ -509,6 +511,9 @@ const TradingJournalSupabase = () => {
     console.log('Groupes créés:', Object.keys(groups).length);
     Object.entries(groups).forEach(([key, orders]) => {
       console.log(`Groupe ${key}:`, orders.length, 'ordres');
+      orders.forEach(o => {
+        console.log(`  - ${o.internalOrderId}: ${o.status} ${o.orderType} ${o.buySell} ${o.openClose} (parent: ${o.parentInternalOrderId})`);
+      });
     });
 
     // Traiter chaque groupe pour créer un trade
@@ -520,7 +525,9 @@ const TradingJournalSupabase = () => {
         type: o.orderType,
         buySell: o.buySell,
         openClose: o.openClose,
-        filled: o.filledQuantity
+        filled: o.filledQuantity,
+        price: o.avgFillPrice,
+        parent: o.parentInternalOrderId
       })));
       
       // Trouver les différents types d'ordres avec des critères plus flexibles
@@ -548,7 +555,8 @@ const TradingJournalSupabase = () => {
           isClose, isFilled, hasQuantity,
           openClose: o.openClose,
           status: o.status,
-          filledQty: o.filledQuantity
+          filledQty: o.filledQuantity,
+          type: o.orderType
         });
         
         return isClose && isFilled && hasQuantity;
@@ -558,7 +566,7 @@ const TradingJournalSupabase = () => {
       const stopOrder = orderGroup.find(o => {
         const isStop = o.orderType === 'Stop';
         console.log(`Ordre ${o.internalOrderId} - Stop check:`, {
-          isStop, type: o.orderType
+          isStop, type: o.orderType, status: o.status, price: o.price
         });
         return isStop;
       });
@@ -567,16 +575,16 @@ const TradingJournalSupabase = () => {
         const isLimit = o.orderType === 'Limit';
         const isClose = o.openClose === 'Close';
         console.log(`Ordre ${o.internalOrderId} - Limit check:`, {
-          isLimit, isClose, type: o.orderType, openClose: o.openClose
+          isLimit, isClose, type: o.orderType, openClose: o.openClose, status: o.status, price: o.price
         });
         return isLimit && isClose;
       });
 
       console.log('Ordres identifiés pour le trade:', {
         entry: entryOrder ? `${entryOrder.internalOrderId} (${entryOrder.buySell} ${entryOrder.avgFillPrice})` : 'MANQUANT',
-        exit: exitOrder ? `${exitOrder.internalOrderId} (${exitOrder.avgFillPrice})` : 'Aucun',
-        stop: stopOrder ? `${stopOrder.internalOrderId} (${stopOrder.price})` : 'Aucun',
-        limit: limitOrder ? `${limitOrder.internalOrderId} (${limitOrder.price})` : 'Aucun'
+        exit: exitOrder ? `${exitOrder.internalOrderId} (${exitOrder.avgFillPrice})` : 'MANQUANT',
+        stop: stopOrder ? `${stopOrder.internalOrderId} (${stopOrder.price} - ${stopOrder.status})` : 'MANQUANT',
+        limit: limitOrder ? `${limitOrder.internalOrderId} (${limitOrder.price} - ${limitOrder.status})` : 'MANQUANT'
       });
 
       if (!entryOrder) {
@@ -610,6 +618,8 @@ const TradingJournalSupabase = () => {
           pnl = pnl / 10;
           console.log('Ajustement micro contrat, P&L final:', pnl);
         }
+      } else {
+        console.log('❌ Pas de calcul P&L possible - pas d\'ordre de sortie rempli');
       }
 
       const trade = {
@@ -623,7 +633,7 @@ const TradingJournalSupabase = () => {
         take_profit: limitOrder ? limitOrder.price : null,
         pnl: pnl,
         rating: null,
-        comment: `Import: ${orderGroup.length} ordres (${orderGroup.map(o => o.status).join(', ')})`,
+        comment: `Import: ${orderGroup.length} ordres (Entry: ${entryOrder.internalOrderId}, Exit: ${exitOrder?.internalOrderId || 'None'}, SL: ${stopOrder?.internalOrderId || 'None'}, TP: ${limitOrder?.internalOrderId || 'None'})`,
         grouped: false,
         execution_time: entryOrder.entryTime,
         user_id: currentUser.id
