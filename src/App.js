@@ -38,6 +38,13 @@ const TradingJournalSupabase = () => {
   const [chatMessages, setChatMessages] = useState([]);
   const [newMessage, setNewMessage] = useState('');
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(null);
+  const [capitalSettings, setCapitalSettings] = useState({
+    initialCapital: 50000,
+    currentCapital: 50000,
+    dailyRiskPercent: 2,
+    dailyRiskDollar: 1000
+  });
+  const [chartDateRange, setChartDateRange] = useState({ start: '', end: '' });
 
   // Questions psychologiques modifiées
   const psychQuestions = [
@@ -115,6 +122,12 @@ const TradingJournalSupabase = () => {
         setTheme(settingsData.theme || 'dark');
         setObjectives(settingsData.objectives || { daily: 500, weekly: 2000, monthly: 8000 });
         setRiskLimit(settingsData.risk_limit || 2);
+        setCapitalSettings(settingsData.capital_settings || {
+          initialCapital: 50000,
+          currentCapital: 50000,
+          dailyRiskPercent: 2,
+          dailyRiskDollar: 1000
+        });
         if (settingsData.commissions) setCommissions(settingsData.commissions);
       }
 
@@ -312,6 +325,7 @@ const TradingJournalSupabase = () => {
           theme: theme,
           objectives: objectives,
           risk_limit: riskLimit,
+          capital_settings: capitalSettings,
           commissions: commissions,
           updated_at: new Date().toISOString()
         });
@@ -892,7 +906,27 @@ const TradingJournalSupabase = () => {
       
       return () => clearTimeout(timeoutId);
     }
-  }, [theme, objectives, riskLimit, commissions]);
+  }, [theme, objectives, riskLimit, commissions, capitalSettings]);
+
+  // Mettre à jour les dates du graphique quand les trades changent
+  useEffect(() => {
+    if (trades.length > 0 && (!chartDateRange.start || !chartDateRange.end)) {
+      const dates = trades.map(t => new Date(t.date)).sort((a, b) => a - b);
+      setChartDateRange({
+        start: dates[0].toISOString().split('T')[0],
+        end: dates[dates.length - 1].toISOString().split('T')[0]
+      });
+    }
+  }, [trades]);
+
+  // Fonction pour mettre à jour le capital avec les nouveaux trades
+  const updateCapitalWithTrades = (newTrades) => {
+    const totalPnL = newTrades.reduce((sum, trade) => sum + (parseFloat(trade.pnl) || 0), 0);
+    setCapitalSettings(prev => ({
+      ...prev,
+      currentCapital: prev.currentCapital + totalPnL
+    }));
+  };
 
   // Fonctions helper
   const checkRiskExposure = (tradesToCheck) => {
@@ -965,7 +999,7 @@ const TradingJournalSupabase = () => {
     a.click();
   };
 
-  // Fonction pour obtenir les données de P&L journalier
+  // Fonction pour obtenir les données de P&L journalier avec auto-scaling
   const getDailyPLData = () => {
     const dailyData = {};
     
@@ -977,13 +1011,56 @@ const TradingJournalSupabase = () => {
       dailyData[date] += parseFloat(trade.pnl || 0);
     });
 
-    return Object.entries(dailyData)
+    const sortedData = Object.entries(dailyData)
       .sort(([dateA], [dateB]) => {
         const [dayA, monthA] = dateA.split('/');
         const [dayB, monthB] = dateB.split('/');
         return new Date(`${monthA}/${dayA}`) - new Date(`${monthB}/${dayB}`);
       })
       .slice(-30); // Derniers 30 jours
+
+    return sortedData;
+  };
+
+  // Fonction pour obtenir les données R
+  const getRData = () => {
+    const filteredTrades = trades.filter(trade => {
+      if (!chartDateRange.start || !chartDateRange.end) return true;
+      const tradeDate = new Date(trade.date).toISOString().split('T')[0];
+      return tradeDate >= chartDateRange.start && tradeDate <= chartDateRange.end;
+    });
+
+    const dailyRisk = capitalSettings.dailyRiskDollar || 
+      (capitalSettings.initialCapital * capitalSettings.dailyRiskPercent / 100);
+
+    return filteredTrades.map(trade => ({
+      date: new Date(trade.date).toLocaleDateString('fr-FR'),
+      r: (parseFloat(trade.pnl) || 0) / dailyRisk,
+      cumR: 0 // Will be calculated below
+    })).sort((a, b) => new Date(a.date) - new Date(b.date))
+      .map((item, index, array) => ({
+        ...item,
+        cumR: array.slice(0, index + 1).reduce((sum, t) => sum + t.r, 0)
+      }));
+  };
+
+  // Fonction pour obtenir les données d'évolution du capital
+  const getCapitalData = () => {
+    const filteredTrades = trades.filter(trade => {
+      if (!chartDateRange.start || !chartDateRange.end) return true;
+      const tradeDate = new Date(trade.date).toISOString().split('T')[0];
+      return tradeDate >= chartDateRange.start && tradeDate <= chartDateRange.end;
+    });
+
+    let runningCapital = capitalSettings.initialCapital;
+    return filteredTrades.sort((a, b) => new Date(a.date) - new Date(b.date))
+      .map(trade => {
+        runningCapital += parseFloat(trade.pnl) || 0;
+        return {
+          date: new Date(trade.date).toLocaleDateString('fr-FR'),
+          capital: runningCapital
+        };
+      });
   };
 
   const isDark = theme === 'dark';
@@ -1345,7 +1422,7 @@ const TradingJournalSupabase = () => {
               </p>
             </div>
 
-            {/* Graphique P&L journalier amélioré */}
+            {/* Graphique P&L journalier amélioré avec auto-scaling */}
             <div className={`${cardClass} p-6 rounded-xl border ${borderClass} md:col-span-2 lg:col-span-3`}>
               <h3 className="text-sm opacity-70 mb-4">P&L Journalier (30 derniers jours)</h3>
               <div className="h-48 overflow-hidden">
@@ -1359,10 +1436,10 @@ const TradingJournalSupabase = () => {
                         <div
                           className={`w-full ${pl >= 0 ? 'bg-green-500' : 'bg-red-500'} rounded-t min-h-[2px]`}
                           style={{ 
-                            height: maxAbsPL > 0 ? `${(Math.abs(pl) / maxAbsPL) * 90}%` : '2px',
+                            height: maxAbsPL > 0 ? `${Math.max((Math.abs(pl) / maxAbsPL) * 90, 2)}%` : '2px',
                             maxHeight: '160px'
                           }}
-                          title={`${date}: $${pl.toFixed(2)}`}
+                          title={`${date}: ${pl.toFixed(2)}`}
                         />
                         <span className="text-xs mt-2 opacity-70 transform rotate-45 origin-left whitespace-nowrap">
                           {date}
@@ -1375,6 +1452,150 @@ const TradingJournalSupabase = () => {
                     </div>
                   )}
                 </div>
+              </div>
+            </div>
+
+            {/* Nouveau graphique R */}
+            <div className={`${cardClass} p-6 rounded-xl border ${borderClass} md:col-span-2 lg:col-span-3`}>
+              <div className="flex items-center justify-between mb-4">
+                <h3 className="text-sm opacity-70">Évolution en R</h3>
+                <div className="flex gap-2 text-xs">
+                  <input
+                    type="date"
+                    value={chartDateRange.start}
+                    onChange={(e) => setChartDateRange(prev => ({...prev, start: e.target.value}))}
+                    className={`px-2 py-1 rounded ${isDark ? 'bg-gray-700' : 'bg-gray-100'}`}
+                  />
+                  <input
+                    type="date"
+                    value={chartDateRange.end}
+                    onChange={(e) => setChartDateRange(prev => ({...prev, end: e.target.value}))}
+                    className={`px-2 py-1 rounded ${isDark ? 'bg-gray-700' : 'bg-gray-100'}`}
+                  />
+                </div>
+              </div>
+              <div className="h-48 relative">
+                {trades.length > 0 ? (() => {
+                  const rData = getRData();
+                  if (rData.length === 0) return <div className="w-full h-full flex items-center justify-center text-gray-500">Aucune donnée dans la période sélectionnée</div>;
+                  
+                  const maxR = Math.max(...rData.map(d => Math.abs(d.cumR)));
+                  const minR = Math.min(...rData.map(d => d.cumR));
+                  
+                  return (
+                    <svg className="w-full h-full">
+                      {/* Ligne zéro */}
+                      <line 
+                        x1="0" 
+                        y1="50%" 
+                        x2="100%" 
+                        y2="50%" 
+                        stroke="#6B7280" 
+                        strokeWidth="1" 
+                        strokeDasharray="5,5"
+                      />
+                      {/* Courbe R */}
+                      <polyline
+                        fill="none"
+                        stroke="#3B82F6"
+                        strokeWidth="2"
+                        points={rData.map((d, i) => {
+                          const x = (i / (rData.length - 1)) * 100;
+                          const y = maxR > 0 ? (1 - (d.cumR - minR) / (maxR - minR)) * 100 : 50;
+                          return `${x},${y}`;
+                        }).join(' ')}
+                      />
+                      {/* Points */}
+                      {rData.map((d, i) => {
+                        const x = (i / (rData.length - 1)) * 100;
+                        const y = maxR > 0 ? (1 - (d.cumR - minR) / (maxR - minR)) * 100 : 50;
+                        return (
+                          <circle
+                            key={i}
+                            cx={`${x}%`}
+                            cy={`${y}%`}
+                            r="3"
+                            fill={d.cumR >= 0 ? "#10B981" : "#EF4444"}
+                          >
+                            <title>{`${d.date}: ${d.cumR.toFixed(2)}R`}</title>
+                          </circle>
+                        );
+                      })}
+                    </svg>
+                  );
+                })() : (
+                  <div className="w-full h-full flex items-center justify-center text-gray-500">
+                    Importez des trades pour voir l'évolution en R
+                  </div>
+                )}
+              </div>
+              <div className="mt-2 text-xs opacity-70 text-center">
+                Risque journalier: {capitalSettings.dailyRiskDollar ? `${capitalSettings.dailyRiskDollar}` : `${capitalSettings.dailyRiskPercent}% (${(capitalSettings.initialCapital * capitalSettings.dailyRiskPercent / 100).toFixed(0)})`}
+              </div>
+            </div>
+
+            {/* Nouveau graphique d'évolution du capital */}
+            <div className={`${cardClass} p-6 rounded-xl border ${borderClass} md:col-span-2 lg:col-span-3`}>
+              <h3 className="text-sm opacity-70 mb-4">Évolution du Capital</h3>
+              <div className="h-48 relative">
+                {trades.length > 0 ? (() => {
+                  const capitalData = getCapitalData();
+                  if (capitalData.length === 0) return <div className="w-full h-full flex items-center justify-center text-gray-500">Aucune donnée dans la période sélectionnée</div>;
+                  
+                  const maxCapital = Math.max(...capitalData.map(d => d.capital));
+                  const minCapital = Math.min(...capitalData.map(d => d.capital));
+                  const initialCap = capitalSettings.initialCapital;
+                  
+                  return (
+                    <svg className="w-full h-full">
+                      {/* Ligne de capital initial */}
+                      <line 
+                        x1="0" 
+                        y1={`${(1 - (initialCap - minCapital) / (maxCapital - minCapital)) * 100}%`}
+                        x2="100%" 
+                        y2={`${(1 - (initialCap - minCapital) / (maxCapital - minCapital)) * 100}%`}
+                        stroke="#6B7280" 
+                        strokeWidth="1" 
+                        strokeDasharray="5,5"
+                      />
+                      {/* Courbe capital */}
+                      <polyline
+                        fill="none"
+                        stroke="#8B5CF6"
+                        strokeWidth="2"
+                        points={capitalData.map((d, i) => {
+                          const x = (i / (capitalData.length - 1)) * 100;
+                          const y = (1 - (d.capital - minCapital) / (maxCapital - minCapital)) * 100;
+                          return `${x},${y}`;
+                        }).join(' ')}
+                      />
+                      {/* Points */}
+                      {capitalData.map((d, i) => {
+                        const x = (i / (capitalData.length - 1)) * 100;
+                        const y = (1 - (d.capital - minCapital) / (maxCapital - minCapital)) * 100;
+                        return (
+                          <circle
+                            key={i}
+                            cx={`${x}%`}
+                            cy={`${y}%`}
+                            r="3"
+                            fill={d.capital >= initialCap ? "#10B981" : "#EF4444"}
+                          >
+                            <title>{`${d.date}: ${d.capital.toFixed(2)}`}</title>
+                          </circle>
+                        );
+                      })}
+                    </svg>
+                  );
+                })() : (
+                  <div className="w-full h-full flex items-center justify-center text-gray-500">
+                    Importez des trades pour voir l'évolution du capital
+                  </div>
+                )}
+              </div>
+              <div className="mt-2 flex justify-between text-xs opacity-70">
+                <span>Capital initial: ${capitalSettings.initialCapital.toLocaleString()}</span>
+                <span>Capital actuel: ${capitalSettings.currentCapital.toLocaleString()}</span>
               </div>
             </div>
 
@@ -2212,6 +2433,72 @@ const TradingJournalSupabase = () => {
                         ...prev,
                         monthly: parseFloat(e.target.value)
                       }))}
+                      className={`flex-1 p-2 rounded ${isDark ? 'bg-gray-700' : 'bg-gray-100'}`}
+                    />
+                  </div>
+                </div>
+              </div>
+
+              <div>
+                <h3 className="text-lg font-semibold mb-3">Gestion du Capital</h3>
+                <div className="space-y-3">
+                  <div className="flex items-center gap-2">
+                    <label className="text-sm w-32">Capital initial ($):</label>
+                    <input
+                      type="number"
+                      value={capitalSettings.initialCapital}
+                      onChange={(e) => setCapitalSettings(prev => ({
+                        ...prev,
+                        initialCapital: parseFloat(e.target.value) || 0
+                      }))}
+                      className={`flex-1 p-2 rounded ${isDark ? 'bg-gray-700' : 'bg-gray-100'}`}
+                    />
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <label className="text-sm w-32">Capital actuel ($):</label>
+                    <input
+                      type="number"
+                      value={capitalSettings.currentCapital}
+                      onChange={(e) => setCapitalSettings(prev => ({
+                        ...prev,
+                        currentCapital: parseFloat(e.target.value) || 0
+                      }))}
+                      className={`flex-1 p-2 rounded ${isDark ? 'bg-gray-700' : 'bg-gray-100'}`}
+                    />
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <label className="text-sm w-32">Risque journalier (%):</label>
+                    <input
+                      type="number"
+                      value={capitalSettings.dailyRiskPercent}
+                      onChange={(e) => {
+                        const percent = parseFloat(e.target.value) || 0;
+                        setCapitalSettings(prev => ({
+                          ...prev,
+                          dailyRiskPercent: percent,
+                          dailyRiskDollar: prev.initialCapital * percent / 100
+                        }));
+                      }}
+                      className={`w-20 p-2 rounded ${isDark ? 'bg-gray-700' : 'bg-gray-100'}`}
+                      step="0.1"
+                    />
+                    <span className="text-sm opacity-70">
+                      = ${(capitalSettings.initialCapital * capitalSettings.dailyRiskPercent / 100).toFixed(0)}
+                    </span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <label className="text-sm w-32">Risque journalier ($):</label>
+                    <input
+                      type="number"
+                      value={capitalSettings.dailyRiskDollar}
+                      onChange={(e) => {
+                        const dollar = parseFloat(e.target.value) || 0;
+                        setCapitalSettings(prev => ({
+                          ...prev,
+                          dailyRiskDollar: dollar,
+                          dailyRiskPercent: prev.initialCapital > 0 ? (dollar / prev.initialCapital) * 100 : 0
+                        }));
+                      }}
                       className={`flex-1 p-2 rounded ${isDark ? 'bg-gray-700' : 'bg-gray-100'}`}
                     />
                   </div>
