@@ -620,23 +620,60 @@ const TradingJournalSupabase = () => {
       let pnl = 0;
       if (exitOrder && entryOrder) {
         const isLong = entryOrder.buySell === 'Buy';
-        const multiplier = isLong ? 1 : -1;
-        pnl = (exitOrder.avgFillPrice - entryOrder.avgFillPrice) * multiplier * entryOrder.filledQuantity;
+        const entryPrice = entryOrder.avgFillPrice;
+        const exitPrice = exitOrder.avgFillPrice;
+        const quantity = entryOrder.filledQuantity;
         
-        console.log('Calcul P&L:', {
-          entryPrice: entryOrder.avgFillPrice,
-          exitPrice: exitOrder.avgFillPrice,
+        // Calcul des ticks et valeur par tick selon l'instrument
+        const priceDiff = exitPrice - entryPrice;
+        const ticks = Math.abs(priceDiff * 10); // 1 point = 10 ticks pour l'or
+        
+        let tickValue = 1; // Valeur par défaut
+        const symbol = entryOrder.symbol.replace(/\.(COMEX|NYMEX|CBOT|CME)$/, '');
+        
+        // Déterminer la valeur du tick selon l'instrument
+        if (symbol.startsWith('MGC')) {
+          tickValue = 1; // Micro or : 1$ par tick
+        } else if (symbol.startsWith('GC')) {
+          tickValue = 10; // Or standard : 10$ par tick
+        } else if (symbol.startsWith('MES')) {
+          tickValue = 1.25; // Micro E-mini S&P 500
+        } else if (symbol.startsWith('ES')) {
+          tickValue = 12.5; // E-mini S&P 500
+        } else if (symbol.startsWith('MNQ')) {
+          tickValue = 0.5; // Micro E-mini Nasdaq
+        } else if (symbol.startsWith('NQ')) {
+          tickValue = 5; // E-mini Nasdaq
+        } else if (symbol.startsWith('MYM')) {
+          tickValue = 0.5; // Micro E-mini Dow
+        } else if (symbol.startsWith('YM')) {
+          tickValue = 5; // E-mini Dow
+        } else if (symbol.startsWith('M2K') || symbol.startsWith('RTY')) {
+          tickValue = symbol.startsWith('M2K') ? 0.5 : 5; // Micro/Standard Russell
+        }
+        
+        // Calcul P&L brut
+        const multiplier = isLong ? 1 : -1;
+        const pnlBrut = priceDiff * multiplier * ticks * tickValue * quantity;
+        
+        // Soustraction des commissions
+        const commission = commissions[symbol] || 0;
+        pnl = pnlBrut - commission;
+        
+        console.log('Calcul P&L détaillé:', {
+          symbol,
+          entryPrice,
+          exitPrice,
+          priceDiff,
+          ticks,
+          tickValue,
           isLong,
           multiplier,
-          quantity: entryOrder.filledQuantity,
-          pnl
+          quantity,
+          pnlBrut,
+          commission,
+          pnlNet: pnl
         });
-        
-        // Ajustement pour micro contrats
-        if (entryOrder.symbol.startsWith('M')) {
-          pnl = pnl / 10;
-          console.log('Ajustement micro contrat, P&L final:', pnl);
-        }
       } else {
         console.log('❌ Pas de calcul P&L possible - pas d\'ordre de sortie rempli');
       }
