@@ -374,8 +374,12 @@ const TradingJournalSupabase = () => {
     console.log('Nombre de lignes d\'ordres:', lines.length);
     console.log('Première ligne (header):', lines[0]);
 
-    // Parser les ordres
+    // Parser les ordres - C'est un CSV avec des virgules !
     const orders = [];
+    
+    // Récupérer les headers
+    const headers = lines[0].split(',').map(h => h.trim());
+    console.log('Headers CSV:', headers);
     
     for (let i = 1; i < lines.length; i++) {
       const line = lines[i].trim();
@@ -384,47 +388,33 @@ const TradingJournalSupabase = () => {
       console.log(`\n=== LIGNE ${i} ===`);
       console.log('Ligne brute:', line);
       
-      // Split par espaces/tabulations multiples, mais garder les espaces dans les dates
-      const parts = line.split(/\s+/);
-      console.log('Nombre de parties après split:', parts.length);
-      console.log('Premières 20 parties:', parts.slice(0, 20));
+      // Split par virgules
+      const values = line.split(',').map(v => v.trim());
+      console.log('Nombre de valeurs après split CSV:', values.length);
+      console.log('Premières 15 valeurs:', values.slice(0, 15));
       
-      if (parts.length < 15) {
-        console.warn(`Ligne ${i} trop courte (${parts.length} parties), ignorée`);
+      if (values.length < 15) {
+        console.warn(`Ligne ${i} trop courte (${values.length} valeurs), ignorée`);
         continue;
       }
       
       try {
-        // Reconstruction des dates qui peuvent être séparées
-        let entryTime, lastActivityTime, symbolIndex = 4;
-        
-        // Vérifier si les dates sont bien formées
-        if (parts[1].includes(':')) {
-          // Format: 2025-08-20 10:52:26.347
-          entryTime = `${parts[0]} ${parts[1]}`;
-          lastActivityTime = `${parts[2]} ${parts[3]}`;
-          symbolIndex = 4;
-        } else {
-          console.warn('Format de date non reconnu, ajustement...');
-          entryTime = parts[0];
-          symbolIndex = 1;
-        }
-        
+        // Mapping par index des colonnes CSV
         const order = {
-          entryTime: entryTime,
-          lastActivityTime: lastActivityTime,
-          symbol: parts[symbolIndex],
-          status: parts[symbolIndex + 1],
-          internalOrderId: parts[symbolIndex + 2],
-          orderType: parts[symbolIndex + 3],
-          buySell: parts[symbolIndex + 4],
-          openClose: parts[symbolIndex + 5],
-          orderQuantity: parseInt(parts[symbolIndex + 6]) || 0,
-          price: parseFloat(parts[symbolIndex + 7]) || 0,
-          price2: parseFloat(parts[symbolIndex + 8]) || 0,
-          filledQuantity: parseInt(parts[symbolIndex + 9]) || 0,
-          avgFillPrice: parseFloat(parts[symbolIndex + 10]) || 0,
-          parentInternalOrderId: parts[symbolIndex + 11],
+          entryTime: values[0], // Entry Time
+          lastActivityTime: values[1], // Last Activity Time
+          symbol: values[2], // Symbol
+          status: values[3], // Status
+          internalOrderId: values[4], // Internal Order ID
+          orderType: values[5], // Order Type
+          buySell: values[6], // Buy/Sell
+          openClose: values[7], // Open/Close
+          orderQuantity: parseInt(values[8]) || 0, // Order Quantity
+          price: parseFloat(values[9]) || 0, // Price
+          price2: parseFloat(values[10]) || 0, // Price 2
+          filledQuantity: parseInt(values[11]) || 0, // Filled Quantity
+          avgFillPrice: parseFloat(values[12]) || 0, // Average Fill Price
+          parentInternalOrderId: values[13], // Parent Internal Order ID
           lineIndex: i
         };
         
@@ -444,7 +434,7 @@ const TradingJournalSupabase = () => {
         
       } catch (e) {
         console.error(`Erreur parsing ligne ${i}:`, e);
-        console.error('Parties problématiques:', parts);
+        console.error('Valeurs problématiques:', values);
       }
     }
 
