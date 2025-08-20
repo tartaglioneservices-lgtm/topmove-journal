@@ -487,31 +487,50 @@ const TradingJournalSupabase = () => {
     
     console.log('\n=== GROUPEMENT DES ORDRES ===');
     
-    // Grouper par parentInternalOrderId ou par symbol+temps
+    // Stratégie de groupement améliorée
     const groups = {};
     
+    // Étape 1: Identifier les ordres parents (ordres d'entrée)
+    const parentOrders = orders.filter(o => o.parentInternalOrderId === '0' || o.parentInternalOrderId === o.internalOrderId);
+    console.log('Ordres parents identifiés:', parentOrders.map(o => o.internalOrderId));
+    
+    // Étape 2: Pour chaque ordre parent, créer un groupe avec ses enfants
+    parentOrders.forEach(parentOrder => {
+      const groupKey = parentOrder.internalOrderId;
+      groups[groupKey] = [parentOrder]; // Commencer avec l'ordre parent
+      
+      // Ajouter tous les ordres qui ont ce parent
+      const childOrders = orders.filter(o => 
+        o.parentInternalOrderId === parentOrder.internalOrderId && 
+        o.internalOrderId !== parentOrder.internalOrderId
+      );
+      
+      groups[groupKey] = groups[groupKey].concat(childOrders);
+      
+      console.log(`Groupe ${groupKey} créé:`, groups[groupKey].map(o => 
+        `${o.internalOrderId} (${o.orderType} ${o.buySell} ${o.openClose})`
+      ));
+    });
+    
+    // Étape 3: Gérer les ordres orphelins (fallback)
     orders.forEach(order => {
-      // Utiliser le parentInternalOrderId s'il existe, sinon grouper par symbol
-      let groupKey = order.parentInternalOrderId;
+      const isAssigned = Object.values(groups).some(group => 
+        group.some(o => o.internalOrderId === order.internalOrderId)
+      );
       
-      if (!groupKey || groupKey === '0') {
-        // Si pas de parent ID, grouper par symbol et time (même minute)
-        const timeKey = order.entryTime.substring(0, 16); // YYYY-MM-DD HH:MM
-        groupKey = `${order.symbol}_${timeKey}`;
+      if (!isAssigned) {
+        console.log(`Ordre orphelin ${order.internalOrderId}, groupement par symbol+temps`);
+        const timeKey = order.entryTime.substring(0, 16);
+        const fallbackKey = `${order.symbol}_${timeKey}`;
+        if (!groups[fallbackKey]) groups[fallbackKey] = [];
+        groups[fallbackKey].push(order);
       }
-      
-      console.log(`Ordre ${order.internalOrderId} assigné au groupe: ${groupKey} (parent: ${order.parentInternalOrderId})`);
-      
-      if (!groups[groupKey]) {
-        groups[groupKey] = [];
-      }
-      groups[groupKey].push(order);
     });
 
-    console.log('Groupes créés:', Object.keys(groups).length);
-    Object.entries(groups).forEach(([key, orders]) => {
-      console.log(`Groupe ${key}:`, orders.length, 'ordres');
-      orders.forEach(o => {
+    console.log('Groupes finaux créés:', Object.keys(groups).length);
+    Object.entries(groups).forEach(([key, groupOrders]) => {
+      console.log(`Groupe ${key}:`, groupOrders.length, 'ordres');
+      groupOrders.forEach(o => {
         console.log(`  - ${o.internalOrderId}: ${o.status} ${o.orderType} ${o.buySell} ${o.openClose} (parent: ${o.parentInternalOrderId})`);
       });
     });
@@ -530,7 +549,7 @@ const TradingJournalSupabase = () => {
         parent: o.parentInternalOrderId
       })));
       
-      // Trouver les différents types d'ordres avec des critères plus flexibles
+      // Trouver les différents types d'ordres
       const entryOrder = orderGroup.find(o => {
         const isOpen = o.openClose === 'Open';
         const isFilled = o.status === 'Filled';
