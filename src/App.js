@@ -372,6 +372,7 @@ const TradingJournalSupabase = () => {
     }
 
     console.log('Nombre de lignes d\'ordres:', lines.length);
+    console.log('Première ligne (header):', lines[0]);
 
     // Parser les ordres
     const orders = [];
@@ -380,47 +381,92 @@ const TradingJournalSupabase = () => {
       const line = lines[i].trim();
       if (!line) continue;
       
-      // Split par espaces/tabulations multiples
-      const parts = line.split(/\s+/);
+      console.log(`\n=== LIGNE ${i} ===`);
+      console.log('Ligne brute:', line);
       
-      if (parts.length < 20) {
-        console.warn('Ligne trop courte ignorée:', i, parts.length);
+      // Split par espaces/tabulations multiples, mais garder les espaces dans les dates
+      const parts = line.split(/\s+/);
+      console.log('Nombre de parties après split:', parts.length);
+      console.log('Premières 20 parties:', parts.slice(0, 20));
+      
+      if (parts.length < 15) {
+        console.warn(`Ligne ${i} trop courte (${parts.length} parties), ignorée`);
         continue;
       }
       
       try {
+        // Reconstruction des dates qui peuvent être séparées
+        let entryTime, lastActivityTime, symbolIndex = 4;
+        
+        // Vérifier si les dates sont bien formées
+        if (parts[1].includes(':')) {
+          // Format: 2025-08-20 10:52:26.347
+          entryTime = `${parts[0]} ${parts[1]}`;
+          lastActivityTime = `${parts[2]} ${parts[3]}`;
+          symbolIndex = 4;
+        } else {
+          console.warn('Format de date non reconnu, ajustement...');
+          entryTime = parts[0];
+          symbolIndex = 1;
+        }
+        
         const order = {
-          entryTime: `${parts[0]} ${parts[1]}`,
-          lastActivityTime: `${parts[2]} ${parts[3]}`,
-          symbol: parts[4],
-          status: parts[5],
-          internalOrderId: parts[6],
-          orderType: parts[7],
-          buySell: parts[8],
-          openClose: parts[9],
-          orderQuantity: parseInt(parts[10]) || 0,
-          price: parseFloat(parts[11]) || 0,
-          price2: parseFloat(parts[12]) || 0,
-          filledQuantity: parseInt(parts[13]) || 0,
-          avgFillPrice: parseFloat(parts[14]) || 0,
-          parentInternalOrderId: parts[15],
+          entryTime: entryTime,
+          lastActivityTime: lastActivityTime,
+          symbol: parts[symbolIndex],
+          status: parts[symbolIndex + 1],
+          internalOrderId: parts[symbolIndex + 2],
+          orderType: parts[symbolIndex + 3],
+          buySell: parts[symbolIndex + 4],
+          openClose: parts[symbolIndex + 5],
+          orderQuantity: parseInt(parts[symbolIndex + 6]) || 0,
+          price: parseFloat(parts[symbolIndex + 7]) || 0,
+          price2: parseFloat(parts[symbolIndex + 8]) || 0,
+          filledQuantity: parseInt(parts[symbolIndex + 9]) || 0,
+          avgFillPrice: parseFloat(parts[symbolIndex + 10]) || 0,
+          parentInternalOrderId: parts[symbolIndex + 11],
           lineIndex: i
         };
         
-        console.log(`Ordre ${i}:`, order);
+        console.log('Ordre parsé:', {
+          id: order.internalOrderId,
+          status: order.status,
+          type: order.orderType,
+          buySell: order.buySell,
+          openClose: order.openClose,
+          quantity: order.orderQuantity,
+          filledQty: order.filledQuantity,
+          avgPrice: order.avgFillPrice,
+          parentId: order.parentInternalOrderId
+        });
+        
         orders.push(order);
         
       } catch (e) {
-        console.error(`Erreur parsing ligne ${i}:`, e, parts);
+        console.error(`Erreur parsing ligne ${i}:`, e);
+        console.error('Parties problématiques:', parts);
       }
     }
 
+    console.log('\n=== RÉSUMÉ DES ORDRES ===');
     console.log('Total ordres parsés:', orders.length);
+    orders.forEach((order, idx) => {
+      console.log(`Ordre ${idx + 1}:`, {
+        id: order.internalOrderId,
+        status: order.status,
+        type: order.orderType,
+        side: order.buySell,
+        openClose: order.openClose,
+        filled: order.filledQuantity,
+        price: order.avgFillPrice
+      });
+    });
 
     // Grouper les ordres par trade
     const trades = groupOrdersIntoTrades(orders);
     
     if (trades.length === 0) {
+      console.error('Aucun trade créé - vérifiez les critères de groupement');
       alert('Aucun trade complet trouvé dans les ordres');
       return;
     }
@@ -449,6 +495,8 @@ const TradingJournalSupabase = () => {
   const groupOrdersIntoTrades = (orders) => {
     const trades = [];
     
+    console.log('\n=== GROUPEMENT DES ORDRES ===');
+    
     // Grouper par parentInternalOrderId ou par symbol+temps
     const groups = {};
     
@@ -468,41 +516,88 @@ const TradingJournalSupabase = () => {
       groups[groupKey].push(order);
     });
 
-    console.log('Groupes d\'ordres:', Object.keys(groups).length);
+    console.log('Groupes créés:', Object.keys(groups).length);
+    Object.entries(groups).forEach(([key, orders]) => {
+      console.log(`Groupe ${key}:`, orders.length, 'ordres');
+    });
 
     // Traiter chaque groupe pour créer un trade
     Object.entries(groups).forEach(([groupKey, orderGroup]) => {
-      console.log(`Traitement groupe ${groupKey}:`, orderGroup);
+      console.log(`\n--- Traitement groupe ${groupKey} ---`);
+      console.log('Ordres du groupe:', orderGroup.map(o => ({
+        id: o.internalOrderId,
+        status: o.status,
+        type: o.orderType,
+        buySell: o.buySell,
+        openClose: o.openClose,
+        filled: o.filledQuantity
+      })));
       
-      // Trouver les différents types d'ordres
-      const entryOrder = orderGroup.find(o => 
-        o.openClose === 'Open' && o.status === 'Filled'
-      );
+      // Trouver les différents types d'ordres avec des critères plus flexibles
+      const entryOrder = orderGroup.find(o => {
+        const isOpen = o.openClose === 'Open';
+        const isFilled = o.status === 'Filled';
+        const hasQuantity = o.filledQuantity > 0;
+        
+        console.log(`Ordre ${o.internalOrderId} - Entry check:`, {
+          isOpen, isFilled, hasQuantity,
+          openClose: o.openClose,
+          status: o.status,
+          filledQty: o.filledQuantity
+        });
+        
+        return isOpen && isFilled && hasQuantity;
+      });
       
-      const exitOrder = orderGroup.find(o => 
-        o.openClose === 'Close' && o.status === 'Filled'
-      );
+      const exitOrder = orderGroup.find(o => {
+        const isClose = o.openClose === 'Close';
+        const isFilled = o.status === 'Filled';
+        const hasQuantity = o.filledQuantity > 0;
+        
+        console.log(`Ordre ${o.internalOrderId} - Exit check:`, {
+          isClose, isFilled, hasQuantity,
+          openClose: o.openClose,
+          status: o.status,
+          filledQty: o.filledQuantity
+        });
+        
+        return isClose && isFilled && hasQuantity;
+      });
       
       // Trouver SL et TP (même s'ils sont annulés)
-      const stopOrder = orderGroup.find(o => 
-        o.orderType === 'Stop' || (o.orderType === 'Stop' && o.openClose === 'Close')
-      );
+      const stopOrder = orderGroup.find(o => {
+        const isStop = o.orderType === 'Stop';
+        console.log(`Ordre ${o.internalOrderId} - Stop check:`, {
+          isStop, type: o.orderType
+        });
+        return isStop;
+      });
       
-      const limitOrder = orderGroup.find(o => 
-        o.orderType === 'Limit' && o.openClose === 'Close'
-      );
+      const limitOrder = orderGroup.find(o => {
+        const isLimit = o.orderType === 'Limit';
+        const isClose = o.openClose === 'Close';
+        console.log(`Ordre ${o.internalOrderId} - Limit check:`, {
+          isLimit, isClose, type: o.orderType, openClose: o.openClose
+        });
+        return isLimit && isClose;
+      });
 
-      console.log('Ordres identifiés:', {
-        entry: entryOrder?.internalOrderId,
-        exit: exitOrder?.internalOrderId,
-        stop: stopOrder?.internalOrderId,
-        limit: limitOrder?.internalOrderId
+      console.log('Ordres identifiés pour le trade:', {
+        entry: entryOrder ? `${entryOrder.internalOrderId} (${entryOrder.buySell} ${entryOrder.avgFillPrice})` : 'MANQUANT',
+        exit: exitOrder ? `${exitOrder.internalOrderId} (${exitOrder.avgFillPrice})` : 'Aucun',
+        stop: stopOrder ? `${stopOrder.internalOrderId} (${stopOrder.price})` : 'Aucun',
+        limit: limitOrder ? `${limitOrder.internalOrderId} (${limitOrder.price})` : 'Aucun'
       });
 
       if (!entryOrder) {
-        console.warn('Pas d\'ordre d\'entrée trouvé pour le groupe:', groupKey);
+        console.warn('❌ Pas d\'ordre d\'entrée trouvé pour le groupe:', groupKey);
+        console.warn('Ordres disponibles:', orderGroup.map(o => 
+          `${o.internalOrderId}: ${o.status} ${o.orderType} ${o.buySell} ${o.openClose} (filled: ${o.filledQuantity})`
+        ));
         return;
       }
+
+      console.log('✅ Trade valide trouvé avec entrée:', entryOrder.internalOrderId);
 
       // Calculer le P&L si on a un exit
       let pnl = 0;
@@ -511,9 +606,19 @@ const TradingJournalSupabase = () => {
         const multiplier = isLong ? 1 : -1;
         pnl = (exitOrder.avgFillPrice - entryOrder.avgFillPrice) * multiplier * entryOrder.filledQuantity;
         
+        console.log('Calcul P&L:', {
+          entryPrice: entryOrder.avgFillPrice,
+          exitPrice: exitOrder.avgFillPrice,
+          isLong,
+          multiplier,
+          quantity: entryOrder.filledQuantity,
+          pnl
+        });
+        
         // Ajustement pour micro contrats
         if (entryOrder.symbol.startsWith('M')) {
           pnl = pnl / 10;
+          console.log('Ajustement micro contrat, P&L final:', pnl);
         }
       }
 
@@ -534,10 +639,11 @@ const TradingJournalSupabase = () => {
         user_id: currentUser.id
       };
 
-      console.log('Trade créé:', trade);
+      console.log('✅ Trade créé:', trade);
       trades.push(trade);
     });
 
+    console.log(`\n=== RÉSULTAT FINAL: ${trades.length} trade(s) créé(s) ===`);
     return trades;
   };
 
