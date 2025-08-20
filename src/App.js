@@ -658,11 +658,13 @@ const TradingJournalSupabase = () => {
         const pnlBrut = priceDiff * multiplier * pointValue * quantity;
         
         // Soustraction des commissions
-        const commission = commissions[symbol] || 0;
+        const baseSymbol = symbol.replace(/[Z,H,M,U]\d+$/, ''); // Enlever le mois/année (Z5, H5, etc.)
+        const commission = commissions[baseSymbol] || commissions[symbol] || 0;
         pnl = pnlBrut - commission;
         
         console.log('Calcul P&L détaillé:', {
           symbol,
+          baseSymbol,
           entryPrice: Math.round(entryPrice * 10) / 10, // Arrondi pour éviter les erreurs flottantes
           exitPrice: Math.round(exitPrice * 10) / 10,
           priceDiff: Math.round(priceDiff * 10) / 10,
