@@ -624,37 +624,38 @@ const TradingJournalSupabase = () => {
         const exitPrice = exitOrder.avgFillPrice;
         const quantity = entryOrder.filledQuantity;
         
-        // Calcul des ticks et valeur par tick selon l'instrument
+        // Calcul simplifié selon l'instrument
         const priceDiff = exitPrice - entryPrice;
-        const ticks = Math.abs(priceDiff * 10); // 1 point = 10 ticks pour l'or
-        
-        let tickValue = 1; // Valeur par défaut
         const symbol = entryOrder.symbol.replace(/\.(COMEX|NYMEX|CBOT|CME)$/, '');
         
-        // Déterminer la valeur du tick selon l'instrument
+        let pointValue = 1; // Valeur par défaut : 1$ par point
+        
+        // Déterminer la valeur du point selon l'instrument
         if (symbol.startsWith('MGC')) {
-          tickValue = 1; // Micro or : 1$ par tick
+          pointValue = 10; // Micro or : 10$ par point (donc 1.1 points = 11$)
         } else if (symbol.startsWith('GC')) {
-          tickValue = 10; // Or standard : 10$ par tick
+          pointValue = 100; // Or standard : 100$ par point
         } else if (symbol.startsWith('MES')) {
-          tickValue = 1.25; // Micro E-mini S&P 500
+          pointValue = 5; // Micro E-mini S&P 500 : 5$ par point
         } else if (symbol.startsWith('ES')) {
-          tickValue = 12.5; // E-mini S&P 500
+          pointValue = 50; // E-mini S&P 500 : 50$ par point
         } else if (symbol.startsWith('MNQ')) {
-          tickValue = 0.5; // Micro E-mini Nasdaq
+          pointValue = 2; // Micro E-mini Nasdaq : 2$ par point
         } else if (symbol.startsWith('NQ')) {
-          tickValue = 5; // E-mini Nasdaq
+          pointValue = 20; // E-mini Nasdaq : 20$ par point
         } else if (symbol.startsWith('MYM')) {
-          tickValue = 0.5; // Micro E-mini Dow
+          pointValue = 0.5; // Micro E-mini Dow : 0.5$ par point
         } else if (symbol.startsWith('YM')) {
-          tickValue = 5; // E-mini Dow
-        } else if (symbol.startsWith('M2K') || symbol.startsWith('RTY')) {
-          tickValue = symbol.startsWith('M2K') ? 0.5 : 5; // Micro/Standard Russell
+          pointValue = 5; // E-mini Dow : 5$ par point
+        } else if (symbol.startsWith('M2K')) {
+          pointValue = 5; // Micro Russell : 5$ par point
+        } else if (symbol.startsWith('RTY')) {
+          pointValue = 50; // Russell : 50$ par point
         }
         
         // Calcul P&L brut
         const multiplier = isLong ? 1 : -1;
-        const pnlBrut = priceDiff * multiplier * ticks * tickValue * quantity;
+        const pnlBrut = priceDiff * multiplier * pointValue * quantity;
         
         // Soustraction des commissions
         const commission = commissions[symbol] || 0;
@@ -662,18 +663,20 @@ const TradingJournalSupabase = () => {
         
         console.log('Calcul P&L détaillé:', {
           symbol,
-          entryPrice,
-          exitPrice,
-          priceDiff,
-          ticks,
-          tickValue,
+          entryPrice: Math.round(entryPrice * 10) / 10, // Arrondi pour éviter les erreurs flottantes
+          exitPrice: Math.round(exitPrice * 10) / 10,
+          priceDiff: Math.round(priceDiff * 10) / 10,
+          pointValue,
           isLong,
           multiplier,
           quantity,
-          pnlBrut,
+          pnlBrut: Math.round(pnlBrut * 100) / 100,
           commission,
-          pnlNet: pnl
+          pnlNet: Math.round(pnl * 100) / 100
         });
+        
+        // Arrondir le résultat final
+        pnl = Math.round(pnl * 100) / 100;
       } else {
         console.log('❌ Pas de calcul P&L possible - pas d\'ordre de sortie rempli');
       }
@@ -2229,6 +2232,15 @@ const TradingJournalSupabase = () => {
               </div>
 
               <div className="flex gap-3">
+                <button
+                  onClick={() => {
+                    saveSettings();
+                    alert('Paramètres sauvegardés !');
+                  }}
+                  className="px-4 py-2 bg-blue-500 rounded hover:bg-blue-600 flex items-center justify-center gap-2"
+                >
+                  💾 Sauvegarder les paramètres
+                </button>
                 <button
                   onClick={exportFiscal}
                   className="flex-1 py-2 bg-green-500 rounded hover:bg-green-600 flex items-center justify-center gap-2"
