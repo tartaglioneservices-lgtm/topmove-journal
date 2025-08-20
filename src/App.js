@@ -1342,6 +1342,38 @@ const TradingJournalSupabase = () => {
       .reduce((sum, t) => sum + parseFloat(t.pnl || 0), 0);
   };
 
+  const getDayTradeCount = (date) => {
+    return trades.filter(t => {
+      const tDate = new Date(t.date);
+      return tDate.toDateString() === date.toDateString();
+    }).length;
+  };
+
+  const getWeekStart = (date) => {
+    const d = new Date(date);
+    const day = d.getDay();
+    const diff = d.getDate() - day + (day === 0 ? -6 : 1); // Lundi = début de semaine
+    return new Date(d.setDate(diff));
+  };
+
+  const getWeekEnd = (date) => {
+    const start = getWeekStart(date);
+    const end = new Date(start);
+    end.setDate(start.getDate() + 6);
+    return end;
+  };
+
+  const getWeekDays = (date) => {
+    const start = getWeekStart(date);
+    const days = [];
+    for (let i = 0; i < 7; i++) {
+      const day = new Date(start);
+      day.setDate(start.getDate() + i);
+      days.push(day);
+    }
+    return days;
+  };
+
   const getWeekPL = (weekStart) => {
     const weekEnd = new Date(weekStart);
     weekEnd.setDate(weekEnd.getDate() + 6);
@@ -1352,6 +1384,48 @@ const TradingJournalSupabase = () => {
         return tDate >= weekStart && tDate <= weekEnd;
       })
       .reduce((sum, t) => sum + parseFloat(t.pnl || 0), 0);
+  };
+
+  const getWeekTradeCount = (weekStart) => {
+    const weekEnd = new Date(weekStart);
+    weekEnd.setDate(weekEnd.getDate() + 6);
+    
+    return trades.filter(t => {
+      const tDate = new Date(t.date);
+      return tDate >= weekStart && tDate <= weekEnd;
+    }).length;
+  };
+
+  const getMonthPL = (date) => {
+    return trades
+      .filter(t => {
+        const tDate = new Date(t.date);
+        return tDate.getMonth() === date.getMonth() && tDate.getFullYear() === date.getFullYear();
+      })
+      .reduce((sum, t) => sum + parseFloat(t.pnl || 0), 0);
+  };
+
+  const getMonthTradeCount = (date) => {
+    return trades.filter(t => {
+      const tDate = new Date(t.date);
+      return tDate.getMonth() === date.getMonth() && tDate.getFullYear() === date.getFullYear();
+    }).length;
+  };
+
+  const getYearPL = (date) => {
+    return trades
+      .filter(t => {
+        const tDate = new Date(t.date);
+        return tDate.getFullYear() === date.getFullYear();
+      })
+      .reduce((sum, t) => sum + parseFloat(t.pnl || 0), 0);
+  };
+
+  const getYearTradeCount = (date) => {
+    return trades.filter(t => {
+      const tDate = new Date(t.date);
+      return tDate.getFullYear() === date.getFullYear();
+    }).length;
   };
 
   const exportFiscal = () => {
@@ -2143,7 +2217,7 @@ const TradingJournalSupabase = () => {
           </div>
         )}
 
-        {/* Calendrier */}
+        {/* Calendrier amélioré */}
         {currentView === 'calendar' && (
           <div className={`${cardClass} rounded-xl p-4`}>
             <div className="flex items-center justify-between mb-4">
@@ -2151,7 +2225,13 @@ const TradingJournalSupabase = () => {
                 <button
                   onClick={() => {
                     const newDate = new Date(currentDate);
-                    newDate.setMonth(newDate.getMonth() - 1);
+                    if (calendarView === 'month') {
+                      newDate.setMonth(newDate.getMonth() - 1);
+                    } else if (calendarView === 'week') {
+                      newDate.setDate(newDate.getDate() - 7);
+                    } else if (calendarView === 'year') {
+                      newDate.setFullYear(newDate.getFullYear() - 1);
+                    }
                     setCurrentDate(newDate);
                   }}
                   className="p-2 hover:bg-gray-700 rounded"
@@ -2159,12 +2239,20 @@ const TradingJournalSupabase = () => {
                   <ChevronLeft size={20} />
                 </button>
                 <h2 className="text-xl font-bold">
-                  {currentDate.toLocaleDateString('fr-FR', { month: 'long', year: 'numeric' })}
+                  {calendarView === 'month' && currentDate.toLocaleDateString('fr-FR', { month: 'long', year: 'numeric' })}
+                  {calendarView === 'week' && `Semaine du ${getWeekStart(currentDate).toLocaleDateString('fr-FR', { day: '2-digit', month: '2-digit', year: 'numeric' })}`}
+                  {calendarView === 'year' && currentDate.getFullYear()}
                 </h2>
                 <button
                   onClick={() => {
                     const newDate = new Date(currentDate);
-                    newDate.setMonth(newDate.getMonth() + 1);
+                    if (calendarView === 'month') {
+                      newDate.setMonth(newDate.getMonth() + 1);
+                    } else if (calendarView === 'week') {
+                      newDate.setDate(newDate.getDate() + 7);
+                    } else if (calendarView === 'year') {
+                      newDate.setFullYear(newDate.getFullYear() + 1);
+                    }
                     setCurrentDate(newDate);
                   }}
                   className="p-2 hover:bg-gray-700 rounded"
@@ -2175,70 +2263,228 @@ const TradingJournalSupabase = () => {
               
               <div className="flex gap-2">
                 <button
+                  onClick={() => setCalendarView('week')}
+                  className={`px-3 py-1 rounded ${calendarView === 'week' ? 'bg-blue-500' : 'hover:bg-gray-700'}`}
+                >
+                  Semaine
+                </button>
+                <button
                   onClick={() => setCalendarView('month')}
                   className={`px-3 py-1 rounded ${calendarView === 'month' ? 'bg-blue-500' : 'hover:bg-gray-700'}`}
                 >
                   Mois
                 </button>
                 <button
-                  onClick={() => setCalendarView('week')}
-                  className={`px-3 py-1 rounded ${calendarView === 'week' ? 'bg-blue-500' : 'hover:bg-gray-700'}`}
+                  onClick={() => setCalendarView('year')}
+                  className={`px-3 py-1 rounded ${calendarView === 'year' ? 'bg-blue-500' : 'hover:bg-gray-700'}`}
                 >
-                  Semaine
+                  Année
                 </button>
               </div>
             </div>
 
-            <div className="grid grid-cols-8 gap-2">
-              {['Lun', 'Mar', 'Mer', 'Jeu', 'Ven', 'Sam', 'Dim'].map(day => (
-                <div key={day} className="text-center text-xs opacity-70 py-2">
-                  {day}
+            {/* Vue Semaine */}
+            {calendarView === 'week' && (
+              <div>
+                {/* P&L de la semaine */}
+                <div className="mb-6 p-4 bg-gradient-to-r from-blue-500/10 to-purple-500/10 rounded-lg">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <h3 className="text-lg font-bold">P&L de la semaine</h3>
+                      <p className="text-sm opacity-70">
+                        Du {getWeekStart(currentDate).toLocaleDateString('fr-FR')} au {getWeekEnd(currentDate).toLocaleDateString('fr-FR')}
+                      </p>
+                    </div>
+                    <div className="text-right">
+                      <p className={`text-3xl font-bold ${getWeekPL(getWeekStart(currentDate)) >= 0 ? 'text-green-500' : 'text-red-500'}`}>
+                        ${getWeekPL(getWeekStart(currentDate)).toFixed(2)}
+                      </p>
+                      <p className="text-sm opacity-70">
+                        {getWeekTradeCount(getWeekStart(currentDate))} trade(s)
+                      </p>
+                    </div>
+                  </div>
                 </div>
-              ))}
-              <div className="text-center text-xs opacity-70 py-2">P&L Sem.</div>
 
-              {(() => {
-                const days = generateCalendar();
-                const weeks = [];
-                for (let i = 0; i < days.length; i += 7) {
-                  weeks.push(days.slice(i, i + 7));
-                }
-                
-                return weeks.map((week, weekIdx) => (
-                  <React.Fragment key={weekIdx}>
-                    {week.map(day => {
-                      const dayPL = getDayPL(day);
-                      const isCurrentMonth = day.getMonth() === currentDate.getMonth();
-                      
-                      return (
-                        <div
-                          key={day.toISOString()}
-                          className={`p-2 rounded ${
-                            isCurrentMonth ? '' : 'opacity-30'
-                          } ${
-                            dayPL > 0 ? 'bg-green-500/20 border border-green-500' :
-                            dayPL < 0 ? 'bg-red-500/20 border border-red-500' :
-                            `border ${borderClass}`
-                          }`}
-                        >
-                          <div className="text-xs opacity-70">{day.getDate()}</div>
-                          {dayPL !== 0 && (
-                            <div className={`text-xs font-bold ${dayPL > 0 ? 'text-green-500' : 'text-red-500'}`}>
-                              ${dayPL.toFixed(0)}
+                {/* Grille des jours de la semaine */}
+                <div className="grid grid-cols-7 gap-2">
+                  {['Lun', 'Mar', 'Mer', 'Jeu', 'Ven', 'Sam', 'Dim'].map(day => (
+                    <div key={day} className="text-center text-sm opacity-70 py-2 font-bold">
+                      {day}
+                    </div>
+                  ))}
+                  
+                  {getWeekDays(currentDate).map(day => {
+                    const dayPL = getDayPL(day);
+                    const dayTrades = getDayTradeCount(day);
+                    
+                    return (
+                      <div
+                        key={day.toISOString()}
+                        className={`p-4 rounded-lg border ${borderClass} ${
+                          dayPL > 0 ? 'bg-green-500/20 border-green-500' :
+                          dayPL < 0 ? 'bg-red-500/20 border-red-500' :
+                          'hover:bg-gray-700'
+                        }`}
+                      >
+                        <div className="text-lg font-bold">{day.getDate()}</div>
+                        {dayPL !== 0 && (
+                          <div className={`text-sm font-bold ${dayPL > 0 ? 'text-green-400' : 'text-red-400'}`}>
+                            ${dayPL.toFixed(0)}
+                          </div>
+                        )}
+                        {dayTrades > 0 && (
+                          <div className="text-xs opacity-70">
+                            {dayTrades} trade{dayTrades > 1 ? 's' : ''}
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+
+            {/* Vue Mois (existante améliorée) */}
+            {calendarView === 'month' && (
+              <div>
+                {/* P&L du mois */}
+                <div className="mb-6 p-4 bg-gradient-to-r from-green-500/10 to-blue-500/10 rounded-lg">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <h3 className="text-lg font-bold">P&L du mois</h3>
+                      <p className="text-sm opacity-70">
+                        {currentDate.toLocaleDateString('fr-FR', { month: 'long', year: 'numeric' })}
+                      </p>
+                    </div>
+                    <div className="text-right">
+                      <p className={`text-3xl font-bold ${getMonthPL(currentDate) >= 0 ? 'text-green-500' : 'text-red-500'}`}>
+                        ${getMonthPL(currentDate).toFixed(2)}
+                      </p>
+                      <p className="text-sm opacity-70">
+                        {getMonthTradeCount(currentDate)} trade(s)
+                      </p>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-8 gap-2">
+                  {['Lun', 'Mar', 'Mer', 'Jeu', 'Ven', 'Sam', 'Dim'].map(day => (
+                    <div key={day} className="text-center text-xs opacity-70 py-2">
+                      {day}
+                    </div>
+                  ))}
+                  <div className="text-center text-xs opacity-70 py-2">P&L Sem.</div>
+
+                  {(() => {
+                    const days = generateCalendar();
+                    const weeks = [];
+                    for (let i = 0; i < days.length; i += 7) {
+                      weeks.push(days.slice(i, i + 7));
+                    }
+                    
+                    return weeks.map((week, weekIdx) => (
+                      <React.Fragment key={weekIdx}>
+                        {week.map(day => {
+                          const dayPL = getDayPL(day);
+                          const isCurrentMonth = day.getMonth() === currentDate.getMonth();
+                          
+                          return (
+                            <div
+                              key={day.toISOString()}
+                              className={`p-2 rounded ${
+                                isCurrentMonth ? '' : 'opacity-30'
+                              } ${
+                                dayPL > 0 ? 'bg-green-500/20 border border-green-500' :
+                                dayPL < 0 ? 'bg-red-500/20 border border-red-500' :
+                                `border ${borderClass}`
+                              }`}
+                            >
+                              <div className="text-xs opacity-70">{day.getDate()}</div>
+                              {dayPL !== 0 && (
+                                <div className={`text-xs font-bold ${dayPL > 0 ? 'text-green-500' : 'text-red-500'}`}>
+                                  ${dayPL.toFixed(0)}
+                                </div>
+                              )}
+                            </div>
+                          );
+                        })}
+                        <div className="p-2 rounded bg-blue-500/20 border border-blue-500">
+                          <div className="text-xs font-bold text-blue-500">
+                            ${getWeekPL(week[0]).toFixed(0)}
+                          </div>
+                        </div>
+                      </React.Fragment>
+                    ));
+                  })()}
+                </div>
+              </div>
+            )}
+
+            {/* Vue Année */}
+            {calendarView === 'year' && (
+              <div>
+                {/* P&L de l'année */}
+                <div className="mb-6 p-4 bg-gradient-to-r from-purple-500/10 to-yellow-500/10 rounded-lg">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <h3 className="text-lg font-bold">P&L de l'année</h3>
+                      <p className="text-sm opacity-70">{currentDate.getFullYear()}</p>
+                    </div>
+                    <div className="text-right">
+                      <p className={`text-3xl font-bold ${getYearPL(currentDate) >= 0 ? 'text-green-500' : 'text-red-500'}`}>
+                        ${getYearPL(currentDate).toFixed(2)}
+                      </p>
+                      <p className="text-sm opacity-70">
+                        {getYearTradeCount(currentDate)} trade(s)
+                      </p>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Grille des mois */}
+                <div className="grid grid-cols-3 gap-4">
+                  {Array.from({length: 12}, (_, i) => {
+                    const monthDate = new Date(currentDate.getFullYear(), i, 1);
+                    const monthPL = getMonthPL(monthDate);
+                    const monthTrades = getMonthTradeCount(monthDate);
+                    const monthName = monthDate.toLocaleDateString('fr-FR', { month: 'long' });
+                    
+                    return (
+                      <div
+                        key={i}
+                        className={`p-4 rounded-lg border ${borderClass} ${
+                          monthPL > 0 ? 'bg-green-500/20 border-green-500' :
+                          monthPL < 0 ? 'bg-red-500/20 border-red-500' :
+                          'hover:bg-gray-700'
+                        } cursor-pointer transition-all`}
+                        onClick={() => {
+                          setCurrentDate(monthDate);
+                          setCalendarView('month');
+                        }}
+                      >
+                        <div className="text-center">
+                          <div className="text-lg font-bold capitalize">{monthName}</div>
+                          {monthPL !== 0 && (
+                            <div className={`text-xl font-bold mt-2 ${monthPL > 0 ? 'text-green-400' : 'text-red-400'}`}>
+                              ${monthPL.toFixed(0)}
                             </div>
                           )}
+                          {monthTrades > 0 && (
+                            <div className="text-sm opacity-70 mt-1">
+                              {monthTrades} trade{monthTrades > 1 ? 's' : ''}
+                            </div>
+                          )}
+                          {monthPL === 0 && monthTrades === 0 && (
+                            <div className="text-sm opacity-50 mt-2">Aucun trade</div>
+                          )}
                         </div>
-                      );
-                    })}
-                    <div className="p-2 rounded bg-blue-500/20 border border-blue-500">
-                      <div className="text-xs font-bold text-blue-500">
-                        ${getWeekPL(week[0]).toFixed(0)}
                       </div>
-                    </div>
-                  </React.Fragment>
-                ));
-              })()}
-            </div>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
           </div>
         )}
 
