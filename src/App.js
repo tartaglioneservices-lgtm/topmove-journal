@@ -2162,6 +2162,8 @@ const TradingJournalSupabase = () => {
   }, [isAuthenticated, currentUser]);
 
   // Vérifier si l'utilisateur est connecté
+
+  // Vérifier si l'utilisateur est connecté
   const checkSession = async () => {
     try {
       const { data: { session } } = await supabase.auth.getSession();
