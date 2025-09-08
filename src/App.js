@@ -751,7 +751,7 @@ const TradingJournalSupabase = () => {
 
       if (t.pnl > 0) {
         current
-		import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { Calendar, TrendingUp, TrendingDown, BarChart3, Settings, Moon, Sun, Upload, AlertTriangle, Target, Brain, BookOpen, Calculator, Download, Cloud, ChevronLeft, ChevronRight, Star, MessageSquare, DollarSign, Percent, Hash, Activity, PieChart, LineChart, Shield, CheckCircle, XCircle, AlertCircle, Users, Trophy, Award, Lock, LogIn, UserPlus, Eye, EyeOff, School, Send, Loader, Trash2, Plus, FileText } from 'lucide-react';
 import { supabase } from './supabaseClient';
 
@@ -4044,4 +4044,5 @@ rounded-xl border ${borderClass} md:col-span-2 lg:col-span-3`}>
 };
 
 export default TradingJournalSupabase;
+
 
