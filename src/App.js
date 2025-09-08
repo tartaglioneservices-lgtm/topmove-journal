@@ -3984,3 +3984,64 @@ export default TradingJournalSupabase; rounded-xl border ${borderClass}`}>
             </div>
 
             <div className={`${cardClass} p-6
+rounded-xl border ${borderClass} md:col-span-2 lg:col-span-3`}>
+              <h3 className="text-sm opacity-70 mb-4">Évolution du Capital</h3>
+              <div className="h-48 relative">
+                {trades.length > 0 ? (() => {
+                  const capitalData = getCapitalData();
+                  if (capitalData.length === 0) return <div className="w-full h-full flex items-center justify-center text-gray-500">Aucune donnée</div>;
+                  
+                  const maxCapital = Math.max(...capitalData.map(d => d.capital));
+                  const minCapital = Math.min(...capitalData.map(d => d.capital));
+                  const initialCap = capitalSettings.initialCapital;
+                  
+                  return (
+                    <svg className="w-full h-full">
+                      <line 
+                        x1="0" 
+                        y1={`${(1 - (initialCap - minCapital) / (maxCapital - minCapital)) * 100}%`}
+                        x2="100%" 
+                        y2={`${(1 - (initialCap - minCapital) / (maxCapital - minCapital)) * 100}%`}
+                        stroke="#6B7280" 
+                        strokeWidth="1" 
+                        strokeDasharray="5,5"
+                      />
+                      <polyline
+                        fill="none"
+                        stroke="#8B5CF6"
+                        strokeWidth="2"
+                        points={capitalData.map((d, i) => {
+                          const x = (i / (capitalData.length - 1)) * 100;
+                          const y = (1 - (d.capital - minCapital) / (maxCapital - minCapital)) * 100;
+                          return `${x},${y}`;
+                        }).join(' ')}
+                      />
+                    </svg>
+                  );
+                })() : (
+                  <div className="w-full h-full flex items-center justify-center text-gray-500">
+                    Importez des trades pour voir l'évolution
+                  </div>
+                )}
+              </div>
+              <div className="mt-2 flex justify-between text-xs opacity-70">
+                <span>Capital initial: ${capitalSettings.initialCapital.toLocaleString()}</span>
+                <span>Capital actuel: ${capitalSettings.currentCapital.toLocaleString()}</span>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {['calendar', 'trades', 'metrics', 'psychology', 'journal', 'calculator', 'chat', 'achievements', 'settings'].includes(currentView) && (
+          <div className={`${cardClass} rounded-xl p-6`}>
+            <h2 className="text-xl font-bold mb-4">{currentView.charAt(0).toUpperCase() + currentView.slice(1)}</h2>
+            <p className="text-gray-500">Section {currentView} - En développement</p>
+          </div>
+        )}
+      </main>
+    </div>
+  );
+};
+
+export default TradingJournalSupabase;
+
