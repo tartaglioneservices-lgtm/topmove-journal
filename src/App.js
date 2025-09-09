@@ -79,348 +79,6 @@ const TradingJournalSupabase = () => {
       loadUserData(currentUser.id);
       const unsubscribe = subscribeToChat();
       return () => {
-        {/* Trades avec suppression */}
-        {currentView === 'trades' && (
-          <div className={`${cardClass} rounded-xl p-4`}>
-            <div className="flex items-center justify-between mb-4">
-              <h2 className="text-xl font-bold">Historique des Trades</h2>
-              <div className="flex gap-2">
-                <button
-                  onClick={() => setShowAddTradeModal(true)}
-                  className="px-4 py-2 bg-green-500 text-white rounded-lg hover:bg-green-600 flex items-center gap-2"
-                >
-                  ➕ Ajouter un trade
-                </button>
-                <button
-                  onClick={() => setShowResetConfirm(true)}
-                  className="px-4 py-2 bg-red-500 text-white rounded-lg hover:bg-red-600 flex items-center gap-2"
-                >
-                  🗑️ Tout supprimer
-                </button>
-              </div>
-            </div>
-            
-            {trades.length > 0 ? (
-              <div className="overflow-x-auto">
-                <table className="w-full">
-                  <thead>
-                    <tr className="border-b border-gray-700">
-                      <th className="text-left p-2">Date</th>
-                      <th className="text-left p-2">Symbol</th>
-                      <th className="text-left p-2">Side</th>
-                      <th className="text-left p-2">Qty</th>
-                      <th className="text-left p-2">Entry</th>
-                      <th className="text-left p-2">SL</th>
-                      <th className="text-left p-2">TP</th>
-                      <th className="text-left p-2">Exit</th>
-                      <th className="text-left p-2">P&L</th>
-                      <th className="text-left p-2">Note</th>
-                      <th className="text-left p-2">Commentaire</th>
-                      <th className="text-left p-2">Actions</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {trades.map(trade => (
-                      <tr key={trade.id} className={`border-b ${borderClass} ${trade.grouped ? 'bg-blue-500/10' : ''}`}>
-                        <td className="p-2 text-sm">
-                          {new Date(trade.date).toLocaleDateString('fr-FR')}
-                        </td>
-                        <td className="p-2 text-sm">{trade.symbol}</td>
-                        <td className="p-2 text-sm">{trade.side}</td>
-                        <td className="p-2 text-sm">{trade.quantity}</td>
-                        <td className="p-2 text-sm">
-                          <input
-                            type="number"
-                            value={trade.entry_price || ''}
-                            onChange={(e) => updateTrade(trade.id, { entry_price: parseFloat(e.target.value) || 0 })}
-                            className={`w-20 px-1 py-1 text-xs rounded ${isDark ? 'bg-gray-700' : 'bg-gray-100'}`}
-                            step="0.01"
-                          />
-                        </td>
-                        <td className="p-2 text-sm">
-                          <input
-                            type="number"
-                            value={trade.stop_loss || ''}
-                            onChange={(e) => updateTrade(trade.id, { stop_loss: parseFloat(e.target.value) || null })}
-                            className={`w-20 px-1 py-1 text-xs rounded ${isDark ? 'bg-gray-700' : 'bg-gray-100'}`}
-                            placeholder="SL"
-                            step="0.01"
-                          />
-                        </td>
-                        <td className="p-2 text-sm">
-                          <input
-                            type="number"
-                            value={trade.take_profit || ''}
-                            onChange={(e) => updateTrade(trade.id, { take_profit: parseFloat(e.target.value) || null })}
-                            className={`w-20 px-1 py-1 text-xs rounded ${isDark ? 'bg-gray-700' : 'bg-gray-100'}`}
-                            placeholder="TP"
-                            step="0.01"
-                          />
-                        </td>
-                        <td className="p-2 text-sm">
-                          <input
-                            type="number"
-                            value={trade.exit_price || ''}
-                            onChange={(e) => updateTrade(trade.id, { exit_price: parseFloat(e.target.value) || 0 })}
-                            className={`w-20 px-1 py-1 text-xs rounded ${isDark ? 'bg-gray-700' : 'bg-gray-100'}`}
-                            step="0.01"
-                          />
-                        </td>
-                        <td className={`p-2 text-sm font-bold ${trade.pnl >= 0 ? 'text-green-500' : 'text-red-500'}`}>
-                          ${parseFloat(trade.pnl || 0).toFixed(2)}
-                        </td>
-                        <td className="p-2">
-                          <div className="flex gap-1">
-                            {[1,2,3,4,5].map(star => (
-                              <button
-                                key={star}
-                                onClick={() => updateTrade(trade.id, { rating: star })}
-                                className={trade.rating >= star ? 'text-yellow-500' : 'text-gray-600'}
-                              >
-                                <Star size={16} fill={trade.rating >= star ? 'currentColor' : 'none'} />
-                              </button>
-                            ))}
-                          </div>
-                        </td>
-                        <td className="p-2">
-                          <input
-                            type="text"
-                            value={trade.comment || ''}
-                            onChange={(e) => updateTrade(trade.id, { comment: e.target.value })}
-                            className={`px-2 py-1 rounded ${isDark ? 'bg-gray-700' : 'bg-gray-100'} text-sm`}
-                            placeholder="Ajouter un commentaire..."
-                          />
-                        </td>
-                        <td className="p-2">
-                          <button
-                            onClick={() => setShowDeleteConfirm(trade.id)}
-                            className="p-1 text-red-500 hover:bg-red-500/20 rounded"
-                            title="Supprimer le trade"
-                          >
-                            <Trash2 size={16} />
-                          </button>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            ) : (
-              <div className="text-center py-8 text-gray-500">
-                <Upload size={48} className="mx-auto mb-4 opacity-50" />
-                <p>Aucun trade</p>
-                <p className="text-sm mt-2">Utilisez l'import CSV ou ajoutez un trade manuellement</p>
-              </div>
-            )}
-
-            {/* Modal d'ajout de trade */}
-            {showAddTradeModal && (
-              <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-                <div className={`${cardClass} p-6 rounded-xl max-w-md w-full mx-4 max-h-[90vh] overflow-y-auto`}>
-                  <h3 className="text-lg font-bold mb-4">Ajouter un trade</h3>
-                  
-                  <div className="space-y-4">
-                    <div className="grid grid-cols-2 gap-4">
-                      <div>
-                        <label className="text-sm opacity-70">Date</label>
-                        <input
-                          type="date"
-                          value={newTrade.date}
-                          onChange={(e) => setNewTrade(prev => ({...prev, date: e.target.value}))}
-                          className={`w-full p-2 rounded ${isDark ? 'bg-gray-700' : 'bg-gray-100'}`}
-                        />
-                      </div>
-                      <div>
-                        <label className="text-sm opacity-70">Symbol</label>
-                        <select
-                          value={newTrade.symbol}
-                          onChange={(e) => setNewTrade(prev => ({...prev, symbol: e.target.value}))}
-                          className={`w-full p-2 rounded ${isDark ? 'bg-gray-700' : 'bg-gray-100'}`}
-                        >
-                          <option value="ES">ES</option>
-                          <option value="NQ">NQ</option>
-                          <option value="YM">YM</option>
-                          <option value="RTY">RTY</option>
-                          <option value="MES">MES</option>
-                          <option value="MNQ">MNQ</option>
-                          <option value="MYM">MYM</option>
-                          <option value="M2K">M2K</option>
-                          <option value="GC">GC</option>
-                          <option value="SI">SI</option>
-                          <option value="MGC">MGC</option>
-                          <option value="SIL">SIL</option>
-                          <option value="CL">CL</option>
-                          <option value="NG">NG</option>
-                          <option value="QM">QM</option>
-                          <option value="QG">QG</option>
-                        </select>
-                      </div>
-                    </div>
-
-                    <div className="grid grid-cols-2 gap-4">
-                      <div>
-                        <label className="text-sm opacity-70">Direction</label>
-                        <select
-                          value={newTrade.side}
-                          onChange={(e) => setNewTrade(prev => ({...prev, side: e.target.value}))}
-                          className={`w-full p-2 rounded ${isDark ? 'bg-gray-700' : 'bg-gray-100'}`}
-                        >
-                          <option value="Long">Long</option>
-                          <option value="Short">Short</option>
-                        </select>
-                      </div>
-                      <div>
-                        <label className="text-sm opacity-70">Quantité</label>
-                        <input
-                          type="number"
-                          value={newTrade.quantity}
-                          onChange={(e) => setNewTrade(prev => ({...prev, quantity: e.target.value}))}
-                          className={`w-full p-2 rounded ${isDark ? 'bg-gray-700' : 'bg-gray-100'}`}
-                          min="1"
-                        />
-                      </div>
-                    </div>
-
-                    <div className="grid grid-cols-2 gap-4">
-                      <div>
-                        <label className="text-sm opacity-70">Prix d'entrée</label>
-                        <input
-                          type="number"
-                          value={newTrade.entry_price}
-                          onChange={(e) => setNewTrade(prev => ({...prev, entry_price: e.target.value}))}
-                          className={`w-full p-2 rounded ${isDark ? 'bg-gray-700' : 'bg-gray-100'}`}
-                          step="0.1"
-                        />
-                      </div>
-                      <div>
-                        <label className="text-sm opacity-70">Prix de sortie</label>
-                        <input
-                          type="number"
-                          value={newTrade.exit_price}
-                          onChange={(e) => setNewTrade(prev => ({...prev, exit_price: e.target.value}))}
-                          className={`w-full p-2 rounded ${isDark ? 'bg-gray-700' : 'bg-gray-100'}`}
-                          step="0.1"
-                        />
-                      </div>
-                    </div>
-
-                    <div className="grid grid-cols-2 gap-4">
-                      <div>
-                        <label className="text-sm opacity-70">Stop Loss</label>
-                        <input
-                          type="number"
-                          value={newTrade.stop_loss}
-                          onChange={(e) => setNewTrade(prev => ({...prev, stop_loss: e.target.value}))}
-                          className={`w-full p-2 rounded ${isDark ? 'bg-gray-700' : 'bg-gray-100'}`}
-                          step="0.1"
-                          placeholder="Optionnel"
-                        />
-                      </div>
-                      <div>
-                        <label className="text-sm opacity-70">Take Profit</label>
-                        <input
-                          type="number"
-                          value={newTrade.take_profit}
-                          onChange={(e) => setNewTrade(prev => ({...prev, take_profit: e.target.value}))}
-                          className={`w-full p-2 rounded ${isDark ? 'bg-gray-700' : 'bg-gray-100'}`}
-                          step="0.1"
-                          placeholder="Optionnel"
-                        />
-                      </div>
-                    </div>
-
-                    <div>
-                      <label className="text-sm opacity-70">Commentaire</label>
-                      <textarea
-                        value={newTrade.comment}
-                        onChange={(e) => setNewTrade(prev => ({...prev, comment: e.target.value}))}
-                        className={`w-full p-2 rounded ${isDark ? 'bg-gray-700' : 'bg-gray-100'}`}
-                        rows="2"
-                        placeholder="Commentaire optionnel..."
-                      />
-                    </div>
-                  </div>
-
-                  <div className="flex gap-3 mt-6">
-                    <button
-                      onClick={() => setShowAddTradeModal(false)}
-                      className="flex-1 py-2 bg-gray-500 rounded hover:bg-gray-600"
-                    >
-                      Annuler
-                    </button>
-                    <button
-                      onClick={addTradeManually}
-                      className="flex-1 py-2 bg-green-500 rounded hover:bg-green-600"
-                    >
-                      Ajouter
-                    </button>
-                  </div>
-                </div>
-              </div>
-            )}
-
-            {/* Modal de confirmation reset */}
-            {showResetConfirm && (
-              <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-                <div className={`${cardClass} p-6 rounded-xl max-w-md w-full mx-4`}>
-                  <h3 className="text-lg font-bold mb-4 text-red-500">⚠️ Attention !</h3>
-                  <p className="text-sm opacity-70 mb-6">
-                    Êtes-vous sûr de vouloir supprimer <strong>TOUS</strong> vos trades ? 
-                    Cette action est <strong>irréversible</strong> et supprimera également l'historique du capital.
-                  </p>
-                  <div className="bg-yellow-500/10 border border-yellow-500 p-3 rounded mb-4">
-                    <p className="text-sm text-yellow-400">
-                      💡 <strong>Conseil :</strong> Exportez vos données avant de continuer (bouton Export Fiscal dans les paramètres)
-                    </p>
-                  </div>
-                  <div className="flex gap-3">
-                    <button
-                      onClick={() => setShowResetConfirm(false)}
-                      className="flex-1 py-2 bg-gray-500 rounded hover:bg-gray-600"
-                    >
-                      Annuler
-                    </button>
-                    <button
-                      onClick={resetAllTrades}
-                      className="flex-1 py-2 bg-red-500 rounded hover:bg-red-600"
-                    >
-                      Supprimer tout
-                    </button>
-                  </div>
-                </div>
-              </div>
-            )}
-
-            {/* Modal de confirmation de suppression individuelle */}
-            {showDeleteConfirm && (
-              <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-                <div className={`${cardClass} p-6 rounded-xl max-w-md w-full mx-4`}>
-                  <h3 className="text-lg font-bold mb-4">Confirmer la suppression</h3>
-                  <p className="text-sm opacity-70 mb-6">
-                    Êtes-vous sûr de vouloir supprimer ce trade ? Cette action est irréversible.
-                  </p>
-                  <div className="flex gap-3">
-                    <button
-                      onClick={() => setShowDeleteConfirm(null)}
-                      className="flex-1 py-2 bg-gray-500 rounded hover:bg-gray-600"
-                    >
-                      Annuler
-                    </button>
-                    <button
-                      onClick={() => deleteTrade(showDeleteConfirm)}
-                      className="flex-1 py-2 bg-red-500 rounded hover:bg-red-600"
-                    >
-                      Supprimer
-                    </button>
-                  </div>
-                </div>
-              </div>
-            )}
-          </div>
-        )}if (unsubscribe) unsubscribe();
-      };
-    }
-  }, [isAuthenticated, currentUser]);
 
   // Vérifier si l'utilisateur est connecté
   const checkSession = async () => {
@@ -2569,10 +2227,27 @@ const addTradeManually = async () => {
           </div>
         )}
 
-        {/* Trades avec suppression */}
+ {/* Trades avec suppression */}
         {currentView === 'trades' && (
           <div className={`${cardClass} rounded-xl p-4`}>
-            <h2 className="text-xl font-bold mb-4">Historique des Trades</h2>
+            <div className="flex items-center justify-between mb-4">
+              <h2 className="text-xl font-bold">Historique des Trades</h2>
+              <div className="flex gap-2">
+                <button
+                  onClick={() => setShowAddTradeModal(true)}
+                  className="px-4 py-2 bg-green-500 text-white rounded-lg hover:bg-green-600 flex items-center gap-2"
+                >
+                  ➕ Ajouter un trade
+                </button>
+                <button
+                  onClick={() => setShowResetConfirm(true)}
+                  className="px-4 py-2 bg-red-500 text-white rounded-lg hover:bg-red-600 flex items-center gap-2"
+                >
+                  🗑️ Tout supprimer
+                </button>
+              </div>
+            </div>
+            
             {trades.length > 0 ? (
               <div className="overflow-x-auto">
                 <table className="w-full">
@@ -2681,12 +2356,190 @@ const addTradeManually = async () => {
             ) : (
               <div className="text-center py-8 text-gray-500">
                 <Upload size={48} className="mx-auto mb-4 opacity-50" />
-                <p>Aucun trade importé</p>
-                <p className="text-sm mt-2">Utilisez le bouton d'import CSV dans l'en-tête</p>
+                <p>Aucun trade</p>
+                <p className="text-sm mt-2">Utilisez l'import CSV ou ajoutez un trade manuellement</p>
               </div>
             )}
 
-            {/* Modal de confirmation de suppression */}
+            {/* Modal d'ajout de trade */}
+            {showAddTradeModal && (
+              <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+                <div className={`${cardClass} p-6 rounded-xl max-w-md w-full mx-4 max-h-[90vh] overflow-y-auto`}>
+                  <h3 className="text-lg font-bold mb-4">Ajouter un trade</h3>
+                  
+                  <div className="space-y-4">
+                    <div className="grid grid-cols-2 gap-4">
+                      <div>
+                        <label className="text-sm opacity-70">Date</label>
+                        <input
+                          type="date"
+                          value={newTrade.date}
+                          onChange={(e) => setNewTrade(prev => ({...prev, date: e.target.value}))}
+                          className={`w-full p-2 rounded ${isDark ? 'bg-gray-700' : 'bg-gray-100'}`}
+                        />
+                      </div>
+                      <div>
+                        <label className="text-sm opacity-70">Symbol</label>
+                        <select
+                          value={newTrade.symbol}
+                          onChange={(e) => setNewTrade(prev => ({...prev, symbol: e.target.value}))}
+                          className={`w-full p-2 rounded ${isDark ? 'bg-gray-700' : 'bg-gray-100'}`}
+                        >
+                          <option value="ES">ES</option>
+                          <option value="NQ">NQ</option>
+                          <option value="YM">YM</option>
+                          <option value="RTY">RTY</option>
+                          <option value="MES">MES</option>
+                          <option value="MNQ">MNQ</option>
+                          <option value="MYM">MYM</option>
+                          <option value="M2K">M2K</option>
+                          <option value="GC">GC</option>
+                          <option value="SI">SI</option>
+                          <option value="MGC">MGC</option>
+                          <option value="SIL">SIL</option>
+                          <option value="CL">CL</option>
+                          <option value="NG">NG</option>
+                          <option value="QM">QM</option>
+                          <option value="QG">QG</option>
+                        </select>
+                      </div>
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-4">
+                      <div>
+                        <label className="text-sm opacity-70">Direction</label>
+                        <select
+                          value={newTrade.side}
+                          onChange={(e) => setNewTrade(prev => ({...prev, side: e.target.value}))}
+                          className={`w-full p-2 rounded ${isDark ? 'bg-gray-700' : 'bg-gray-100'}`}
+                        >
+                          <option value="Long">Long</option>
+                          <option value="Short">Short</option>
+                        </select>
+                      </div>
+                      <div>
+                        <label className="text-sm opacity-70">Quantité</label>
+                        <input
+                          type="number"
+                          value={newTrade.quantity}
+                          onChange={(e) => setNewTrade(prev => ({...prev, quantity: e.target.value}))}
+                          className={`w-full p-2 rounded ${isDark ? 'bg-gray-700' : 'bg-gray-100'}`}
+                          min="1"
+                        />
+                      </div>
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-4">
+                      <div>
+                        <label className="text-sm opacity-70">Prix d'entrée</label>
+                        <input
+                          type="number"
+                          value={newTrade.entry_price}
+                          onChange={(e) => setNewTrade(prev => ({...prev, entry_price: e.target.value}))}
+                          className={`w-full p-2 rounded ${isDark ? 'bg-gray-700' : 'bg-gray-100'}`}
+                          step="0.1"
+                        />
+                      </div>
+                      <div>
+                        <label className="text-sm opacity-70">Prix de sortie</label>
+                        <input
+                          type="number"
+                          value={newTrade.exit_price}
+                          onChange={(e) => setNewTrade(prev => ({...prev, exit_price: e.target.value}))}
+                          className={`w-full p-2 rounded ${isDark ? 'bg-gray-700' : 'bg-gray-100'}`}
+                          step="0.1"
+                        />
+                      </div>
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-4">
+                      <div>
+                        <label className="text-sm opacity-70">Stop Loss</label>
+                        <input
+                          type="number"
+                          value={newTrade.stop_loss}
+                          onChange={(e) => setNewTrade(prev => ({...prev, stop_loss: e.target.value}))}
+                          className={`w-full p-2 rounded ${isDark ? 'bg-gray-700' : 'bg-gray-100'}`}
+                          step="0.1"
+                          placeholder="Optionnel"
+                        />
+                      </div>
+                      <div>
+                        <label className="text-sm opacity-70">Take Profit</label>
+                        <input
+                          type="number"
+                          value={newTrade.take_profit}
+                          onChange={(e) => setNewTrade(prev => ({...prev, take_profit: e.target.value}))}
+                          className={`w-full p-2 rounded ${isDark ? 'bg-gray-700' : 'bg-gray-100'}`}
+                          step="0.1"
+                          placeholder="Optionnel"
+                        />
+                      </div>
+                    </div>
+
+                    <div>
+                      <label className="text-sm opacity-70">Commentaire</label>
+                      <textarea
+                        value={newTrade.comment}
+                        onChange={(e) => setNewTrade(prev => ({...prev, comment: e.target.value}))}
+                        className={`w-full p-2 rounded ${isDark ? 'bg-gray-700' : 'bg-gray-100'}`}
+                        rows="2"
+                        placeholder="Commentaire optionnel..."
+                      />
+                    </div>
+                  </div>
+
+                  <div className="flex gap-3 mt-6">
+                    <button
+                      onClick={() => setShowAddTradeModal(false)}
+                      className="flex-1 py-2 bg-gray-500 rounded hover:bg-gray-600"
+                    >
+                      Annuler
+                    </button>
+                    <button
+                      onClick={addTradeManually}
+                      className="flex-1 py-2 bg-green-500 rounded hover:bg-green-600"
+                    >
+                      Ajouter
+                    </button>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* Modal de confirmation reset */}
+            {showResetConfirm && (
+              <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+                <div className={`${cardClass} p-6 rounded-xl max-w-md w-full mx-4`}>
+                  <h3 className="text-lg font-bold mb-4 text-red-500">⚠️ Attention !</h3>
+                  <p className="text-sm opacity-70 mb-6">
+                    Êtes-vous sûr de vouloir supprimer <strong>TOUS</strong> vos trades ? 
+                    Cette action est <strong>irréversible</strong> et supprimera également l'historique du capital.
+                  </p>
+                  <div className="bg-yellow-500/10 border border-yellow-500 p-3 rounded mb-4">
+                    <p className="text-sm text-yellow-400">
+                      💡 <strong>Conseil :</strong> Exportez vos données avant de continuer (bouton Export Fiscal dans les paramètres)
+                    </p>
+                  </div>
+                  <div className="flex gap-3">
+                    <button
+                      onClick={() => setShowResetConfirm(false)}
+                      className="flex-1 py-2 bg-gray-500 rounded hover:bg-gray-600"
+                    >
+                      Annuler
+                    </button>
+                    <button
+                      onClick={resetAllTrades}
+                      className="flex-1 py-2 bg-red-500 rounded hover:bg-red-600"
+                    >
+                      Supprimer tout
+                    </button>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* Modal de confirmation de suppression individuelle */}
             {showDeleteConfirm && (
               <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
                 <div className={`${cardClass} p-6 rounded-xl max-w-md w-full mx-4`}>
@@ -2712,7 +2565,10 @@ const addTradeManually = async () => {
               </div>
             )}
           </div>
-        )}
+        )}if (unsubscribe) unsubscribe();
+      };
+    }
+  }, [isAuthenticated, currentUser]);
 
         {/* Metrics */}
         {currentView === 'metrics' && (
