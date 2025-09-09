@@ -667,7 +667,88 @@ const TradingJournalSupabase = () => {
       console.error('Erreur suppression trade:', error);
     }
   };
+// Supprimer tous les trades
+const resetAllTrades = async () => {
+  try {
+    const { error } = await supabase
+      .from('trades')
+      .delete()
+      .eq('user_id', currentUser.id);
 
+    if (error) throw error;
+    
+    // Réinitialiser localement
+    setTrades([]);
+    
+    // Fermer la modal
+    setShowResetConfirm(false);
+    
+    alert('Tous les trades ont été supprimés avec succès. Utilisez le bouton "Recalculer" dans les paramètres pour réinitialiser le capital.');
+    
+  } catch (error) {
+    console.error('Erreur suppression tous les trades:', error);
+    alert(`Erreur lors de la suppression: ${error.message}`);
+  }
+};
+
+// Ajouter un trade manuellement
+const addTradeManually = async () => {
+  try {
+    const tradeToAdd = {
+      ...newTrade,
+      quantity: parseInt(newTrade.quantity),
+      entry_price: parseFloat(newTrade.entry_price) || 0,
+      exit_price: parseFloat(newTrade.exit_price) || 0,
+      stop_loss: parseFloat(newTrade.stop_loss) || null,
+      take_profit: parseFloat(newTrade.take_profit) || null,
+      user_id: currentUser.id,
+      pnl: 0,
+      rating: null,
+      grouped: false,
+      execution_time: new Date().toISOString()
+    };
+    
+    // Calculer le P&L basique si on a entry et exit
+    if (tradeToAdd.exit_price && tradeToAdd.entry_price) {
+      const isLong = tradeToAdd.side === 'Long';
+      const priceDiff = tradeToAdd.exit_price - tradeToAdd.entry_price;
+      const multiplier = isLong ? 1 : -1;
+      const commission = commissions[tradeToAdd.symbol] || 0;
+      
+      // Calcul simplifié - à ajuster selon vos besoins
+      tradeToAdd.pnl = (priceDiff * multiplier * tradeToAdd.quantity * 50) - commission;
+    }
+    
+    const { data, error } = await supabase
+      .from('trades')
+      .insert(tradeToAdd)
+      .select()
+      .single();
+      
+    if (error) throw error;
+    
+    if (data) {
+      setTrades(prev => [data, ...prev]);
+      setShowAddTradeModal(false);
+      
+      // Réinitialiser le formulaire
+      setNewTrade({
+        date: new Date().toISOString().split('T')[0],
+        symbol: 'ES',
+        side: 'Long',
+        quantity: 1,
+        entry_price: 0,
+        exit_price: 0,
+        stop_loss: 0,
+        take_profit: 0,
+        comment: ''
+      });
+    }
+  } catch (error) {
+    console.error('Erreur ajout trade:', error);
+    alert(`Erreur lors de l'ajout: ${error.message}`);
+  }
+};
   // Sauvegarder les paramètres
   const saveSettings = async () => {
     if (!currentUser) return;
