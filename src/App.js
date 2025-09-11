@@ -613,233 +613,164 @@ const TradingJournalSupabase = () => {
       alert(`${data.length} trade(s) importé(s) avec succès !`);
     }
   };
-
-  // Grouper les ordres en trades complets
-  const groupOrdersIntoTrades = (orders) => {
-    const trades = [];
+// Grouper les ordres en trades complets - VERSION AMÉLIORÉE
+const groupOrdersIntoTrades = (orders) => {
+  const trades = [];
+  
+  console.log('\n=== GROUPEMENT DES ORDRES AMÉLIORÉ ===');
+  
+  // Séparer les ordres par type et status
+  const openOrders = orders.filter(o => o.openClose === 'Open' && o.status === 'Filled');
+  const closeOrders = orders.filter(o => o.openClose === 'Close' && o.status === 'Filled');
+  
+  console.log(`Ordres Open trouvés: ${openOrders.length}`);
+  console.log(`Ordres Close trouvés: ${closeOrders.length}`);
+  
+  // Créer une copie des ordres de clôture pour le tracking
+  let unmatchedCloseOrders = [...closeOrders];
+  
+  // Trier les ordres par temps
+  openOrders.sort((a, b) => new Date(a.entryTime) - new Date(b.entryTime));
+  unmatchedCloseOrders.sort((a, b) => new Date(a.entryTime) - new Date(b.entryTime));
+  
+  // Pour chaque ordre d'ouverture, essayer de trouver l'ordre de clôture correspondant
+  openOrders.forEach(openOrder => {
+    console.log(`\n--- Recherche de sortie pour ordre ${openOrder.internalOrderId} ---`);
+    console.log(`Open: ${openOrder.symbol} ${openOrder.buySell} ${openOrder.filledQuantity} @ ${openOrder.avgFillPrice}`);
     
-    console.log('\n=== GROUPEMENT DES ORDRES ===');
+    // Chercher le close order le plus proche qui correspond
+    let closeOrder = null;
+    const openTime = new Date(openOrder.entryTime).getTime();
     
-    // Stratégie de groupement améliorée
-    const groups = {};
-    
-    // Étape 1: Identifier les ordres parents (ordres d'entrée)
-    const parentOrders = orders.filter(o => o.parentInternalOrderId === '0' || o.parentInternalOrderId === o.internalOrderId);
-    console.log('Ordres parents identifiés:', parentOrders.map(o => o.internalOrderId));
-    
-    // Étape 2: Pour chaque ordre parent, créer un groupe avec ses enfants
-    parentOrders.forEach(parentOrder => {
-      const groupKey = parentOrder.internalOrderId;
-      groups[groupKey] = [parentOrder]; // Commencer avec l'ordre parent
+    // Chercher un ordre de clôture correspondant
+    closeOrder = unmatchedCloseOrders.find(c => {
+      const closeTime = new Date(c.entryTime).getTime();
+      const sameSymbol = c.symbol === openOrder.symbol;
+      const sameQuantity = c.filledQuantity === openOrder.filledQuantity;
+      const afterOpen = closeTime > openTime;
       
-      // Ajouter tous les ordres qui ont ce parent
-      const childOrders = orders.filter(o => 
-        o.parentInternalOrderId === parentOrder.internalOrderId && 
-        o.internalOrderId !== parentOrder.internalOrderId
+      // Pour un Long (Buy to Open), on cherche un Sell to Close
+      // Pour un Short (Sell to Open), on cherche un Buy to Close
+      const matchingDirection = (openOrder.buySell === 'Buy' && c.buySell === 'Sell') ||
+                               (openOrder.buySell === 'Sell' && c.buySell === 'Buy');
+      
+      return sameSymbol && sameQuantity && afterOpen && matchingDirection;
+    });
+    
+    if (closeOrder) {
+      console.log(`✅ Match trouvé: Close ${closeOrder.internalOrderId} @ ${closeOrder.avgFillPrice}`);
+      
+      // Retirer cet ordre de clôture de la liste des non-matchés
+      unmatchedCloseOrders = unmatchedCloseOrders.filter(o => o.internalOrderId !== closeOrder.internalOrderId);
+      
+      // Calculer le P&L
+      const isLong = openOrder.buySell === 'Buy';
+      const entryPrice = openOrder.avgFillPrice;
+      const exitPrice = closeOrder.avgFillPrice;
+      const quantity = openOrder.filledQuantity;
+      
+      const priceDiff = exitPrice - entryPrice;
+      const symbol = openOrder.symbol.replace(/\.(COMEX|NYMEX|CBOT|CME)$/, '');
+      
+      let pointValue = 10; // Valeur par défaut pour MGC
+      
+      // Déterminer la valeur du point selon l'instrument
+      if (symbol.startsWith('MGC')) {
+        pointValue = 10;
+      } else if (symbol.startsWith('GC')) {
+        pointValue = 100;
+      } else if (symbol.startsWith('MES')) {
+        pointValue = 5;
+      } else if (symbol.startsWith('ES')) {
+        pointValue = 50;
+      } else if (symbol.startsWith('MNQ')) {
+        pointValue = 2;
+      } else if (symbol.startsWith('NQ')) {
+        pointValue = 20;
+      }
+      
+      const multiplier = isLong ? 1 : -1;
+      const pnlBrut = priceDiff * multiplier * pointValue * quantity;
+      
+      const baseSymbol = symbol.replace(/[Z,H,M,U]\d+$/, '');
+      const commission = commissions[baseSymbol] || commissions[symbol] || 1.84;
+      const pnl = Math.round((pnlBrut - commission) * 100) / 100;
+      
+      // Chercher les ordres SL et TP associés
+      const relatedOrders = orders.filter(o => 
+        o.parentInternalOrderId === openOrder.internalOrderId && 
+        o.internalOrderId !== openOrder.internalOrderId
       );
       
-      groups[groupKey] = groups[groupKey].concat(childOrders);
+      const stopOrder = relatedOrders.find(o => o.orderType === 'Stop');
+      const limitOrder = relatedOrders.find(o => o.orderType === 'Limit' && o.openClose === 'Close');
       
-      console.log(`Groupe ${groupKey} créé:`, groups[groupKey].map(o => 
-        `${o.internalOrderId} (${o.orderType} ${o.buySell} ${o.openClose})`
-      ));
-    });
-    
-    // Étape 3: Gérer les ordres orphelins (fallback)
-    orders.forEach(order => {
-      const isAssigned = Object.values(groups).some(group => 
-        group.some(o => o.internalOrderId === order.internalOrderId)
-      );
-      
-      if (!isAssigned) {
-        console.log(`Ordre orphelin ${order.internalOrderId}, groupement par symbol+temps`);
-        const timeKey = order.entryTime.substring(0, 16);
-        const fallbackKey = `${order.symbol}_${timeKey}`;
-        if (!groups[fallbackKey]) groups[fallbackKey] = [];
-        groups[fallbackKey].push(order);
-      }
-    });
-
-    console.log('Groupes finaux créés:', Object.keys(groups).length);
-    Object.entries(groups).forEach(([key, groupOrders]) => {
-      console.log(`Groupe ${key}:`, groupOrders.length, 'ordres');
-      groupOrders.forEach(o => {
-        console.log(`  - ${o.internalOrderId}: ${o.status} ${o.orderType} ${o.buySell} ${o.openClose} (parent: ${o.parentInternalOrderId})`);
-      });
-    });
-
-    // Traiter chaque groupe pour créer un trade
-    Object.entries(groups).forEach(([groupKey, orderGroup]) => {
-      console.log(`\n--- Traitement groupe ${groupKey} ---`);
-      console.log('Ordres du groupe:', orderGroup.map(o => ({
-        id: o.internalOrderId,
-        status: o.status,
-        type: o.orderType,
-        buySell: o.buySell,
-        openClose: o.openClose,
-        filled: o.filledQuantity,
-        price: o.avgFillPrice,
-        parent: o.parentInternalOrderId
-      })));
-      
-      // Trouver les différents types d'ordres
-      const entryOrder = orderGroup.find(o => {
-        const isOpen = o.openClose === 'Open';
-        const isFilled = o.status === 'Filled';
-        const hasQuantity = o.filledQuantity > 0;
-        
-        console.log(`Ordre ${o.internalOrderId} - Entry check:`, {
-          isOpen, isFilled, hasQuantity,
-          openClose: o.openClose,
-          status: o.status,
-          filledQty: o.filledQuantity
-        });
-        
-        return isOpen && isFilled && hasQuantity;
-      });
-      
-      const exitOrder = orderGroup.find(o => {
-        const isClose = o.openClose === 'Close';
-        const isFilled = o.status === 'Filled';
-        const hasQuantity = o.filledQuantity > 0;
-        
-        console.log(`Ordre ${o.internalOrderId} - Exit check:`, {
-          isClose, isFilled, hasQuantity,
-          openClose: o.openClose,
-          status: o.status,
-          filledQty: o.filledQuantity,
-          type: o.orderType
-        });
-        
-        return isClose && isFilled && hasQuantity;
-      });
-      
-      // Trouver SL et TP (même s'ils sont annulés)
-      const stopOrder = orderGroup.find(o => {
-        const isStop = o.orderType === 'Stop';
-        console.log(`Ordre ${o.internalOrderId} - Stop check:`, {
-          isStop, type: o.orderType, status: o.status, price: o.price
-        });
-        return isStop;
-      });
-      
-      const limitOrder = orderGroup.find(o => {
-        const isLimit = o.orderType === 'Limit';
-        const isClose = o.openClose === 'Close';
-        console.log(`Ordre ${o.internalOrderId} - Limit check:`, {
-          isLimit, isClose, type: o.orderType, openClose: o.openClose, status: o.status, price: o.price
-        });
-        return isLimit && isClose;
-      });
-
-      console.log('Ordres identifiés pour le trade:', {
-        entry: entryOrder ? `${entryOrder.internalOrderId} (${entryOrder.buySell} ${entryOrder.avgFillPrice})` : 'MANQUANT',
-        exit: exitOrder ? `${exitOrder.internalOrderId} (${exitOrder.avgFillPrice})` : 'MANQUANT',
-        stop: stopOrder ? `${stopOrder.internalOrderId} (${stopOrder.price} - ${stopOrder.status})` : 'MANQUANT',
-        limit: limitOrder ? `${limitOrder.internalOrderId} (${limitOrder.price} - ${limitOrder.status})` : 'MANQUANT'
-      });
-
-      if (!entryOrder) {
-        console.warn('❌ Pas d\'ordre d\'entrée trouvé pour le groupe:', groupKey);
-        console.warn('Ordres disponibles:', orderGroup.map(o => 
-          `${o.internalOrderId}: ${o.status} ${o.orderType} ${o.buySell} ${o.openClose} (filled: ${o.filledQuantity})`
-        ));
-        return;
-      }
-
-      console.log('✅ Trade valide trouvé avec entrée:', entryOrder.internalOrderId);
-
-      // Calculer le P&L si on a un exit
-      let pnl = 0;
-      if (exitOrder && entryOrder) {
-        const isLong = entryOrder.buySell === 'Buy';
-        const entryPrice = entryOrder.avgFillPrice;
-        const exitPrice = exitOrder.avgFillPrice;
-        const quantity = entryOrder.filledQuantity;
-        
-        // Calcul simplifié selon l'instrument
-        const priceDiff = exitPrice - entryPrice;
-        const symbol = entryOrder.symbol.replace(/\.(COMEX|NYMEX|CBOT|CME)$/, '');
-        
-        let pointValue = 1; // Valeur par défaut : 1$ par point
-        
-        // Déterminer la valeur du point selon l'instrument
-        if (symbol.startsWith('MGC')) {
-          pointValue = 10; // Micro or : 10$ par point (donc 1.1 points = 11$)
-        } else if (symbol.startsWith('GC')) {
-          pointValue = 100; // Or standard : 100$ par point
-        } else if (symbol.startsWith('MES')) {
-          pointValue = 5; // Micro E-mini S&P 500 : 5$ par point
-        } else if (symbol.startsWith('ES')) {
-          pointValue = 50; // E-mini S&P 500 : 50$ par point
-        } else if (symbol.startsWith('MNQ')) {
-          pointValue = 2; // Micro E-mini Nasdaq : 2$ par point
-        } else if (symbol.startsWith('NQ')) {
-          pointValue = 20; // E-mini Nasdaq : 20$ par point
-        } else if (symbol.startsWith('MYM')) {
-          pointValue = 0.5; // Micro E-mini Dow : 0.5$ par point
-        } else if (symbol.startsWith('YM')) {
-          pointValue = 5; // E-mini Dow : 5$ par point
-        } else if (symbol.startsWith('M2K')) {
-          pointValue = 5; // Micro Russell : 5$ par point
-        } else if (symbol.startsWith('RTY')) {
-          pointValue = 50; // Russell : 50$ par point
-        }
-        
-        // Calcul P&L brut
-        const multiplier = isLong ? 1 : -1;
-        const pnlBrut = priceDiff * multiplier * pointValue * quantity;
-        
-        // Soustraction des commissions
-        const baseSymbol = symbol.replace(/[Z,H,M,U]\d+$/, ''); // Enlever le mois/année (Z5, H5, etc.)
-        const commission = commissions[baseSymbol] || commissions[symbol] || 0;
-        pnl = pnlBrut - commission;
-        
-        console.log('Calcul P&L détaillé:', {
-          symbol,
-          baseSymbol,
-          entryPrice: Math.round(entryPrice * 10) / 10, // Arrondi pour éviter les erreurs flottantes
-          exitPrice: Math.round(exitPrice * 10) / 10,
-          priceDiff: Math.round(priceDiff * 10) / 10,
-          pointValue,
-          isLong,
-          multiplier,
-          quantity,
-          pnlBrut: Math.round(pnlBrut * 100) / 100,
-          commission,
-          pnlNet: Math.round(pnl * 100) / 100
-        });
-        
-        // Arrondir le résultat final
-        pnl = Math.round(pnl * 100) / 100;
-      } else {
-        console.log('❌ Pas de calcul P&L possible - pas d\'ordre de sortie rempli');
-      }
-
       const trade = {
-        date: new Date(entryOrder.entryTime).toISOString(),
-        symbol: entryOrder.symbol.replace(/\.(COMEX|NYMEX|CBOT|CME)$/, ''),
-        side: entryOrder.buySell === 'Buy' ? 'Long' : 'Short',
-        quantity: entryOrder.filledQuantity,
-        entry_price: entryOrder.avgFillPrice,
-        exit_price: exitOrder ? exitOrder.avgFillPrice : null,
+        date: new Date(openOrder.entryTime).toISOString(),
+        symbol: symbol,
+        side: isLong ? 'Long' : 'Short',
+        quantity: quantity,
+        entry_price: entryPrice,
+        exit_price: exitPrice,
         stop_loss: stopOrder ? stopOrder.price : null,
         take_profit: limitOrder ? limitOrder.price : null,
         pnl: pnl,
         rating: null,
-        comment: `Import: ${orderGroup.length} ordres (Entry: ${entryOrder.internalOrderId}, Exit: ${exitOrder?.internalOrderId || 'None'}, SL: ${stopOrder?.internalOrderId || 'None'}, TP: ${limitOrder?.internalOrderId || 'None'})`,
+        comment: `Trade complet: Entry ${openOrder.internalOrderId} → Exit ${closeOrder.internalOrderId}`,
         grouped: false,
-        execution_time: entryOrder.entryTime,
+        execution_time: openOrder.entryTime,
         user_id: currentUser.id
       };
-
-      console.log('✅ Trade créé:', trade);
+      
+      console.log(`✅ Trade créé avec P&L: ${pnl}`);
       trades.push(trade);
-    });
-
-    console.log(`\n=== RÉSULTAT FINAL: ${trades.length} trade(s) créé(s) ===`);
-    return trades;
-  };
+      
+    } else {
+      console.log(`❌ Pas de sortie trouvée pour ordre ${openOrder.internalOrderId}`);
+      
+      // Créer quand même un trade sans sortie (position ouverte)
+      const symbol = openOrder.symbol.replace(/\.(COMEX|NYMEX|CBOT|CME)$/, '');
+      
+      // Chercher les ordres SL et TP associés
+      const relatedOrders = orders.filter(o => 
+        o.parentInternalOrderId === openOrder.internalOrderId && 
+        o.internalOrderId !== openOrder.internalOrderId
+      );
+      
+      const stopOrder = relatedOrders.find(o => o.orderType === 'Stop');
+      const limitOrder = relatedOrders.find(o => o.orderType === 'Limit' && o.openClose === 'Close');
+      
+      const trade = {
+        date: new Date(openOrder.entryTime).toISOString(),
+        symbol: symbol,
+        side: openOrder.buySell === 'Buy' ? 'Long' : 'Short',
+        quantity: openOrder.filledQuantity,
+        entry_price: openOrder.avgFillPrice,
+        exit_price: null,
+        stop_loss: stopOrder ? stopOrder.price : null,
+        take_profit: limitOrder ? limitOrder.price : null,
+        pnl: 0,
+        rating: null,
+        comment: `⚠️ Position ouverte - Entry ${openOrder.internalOrderId}`,
+        grouped: false,
+        execution_time: openOrder.entryTime,
+        user_id: currentUser.id
+      };
+      
+      trades.push(trade);
+    }
+  });
+  
+  // Reporter les ordres de clôture non matchés
+  if (unmatchedCloseOrders.length > 0) {
+    console.log(`\n⚠️ ${unmatchedCloseOrders.length} ordres de clôture sans entrée correspondante:`, 
+      unmatchedCloseOrders.map(o => `${o.internalOrderId} (${o.symbol} ${o.buySell} ${o.filledQuantity} @ ${o.avgFillPrice})`)
+    );
+  }
+  
+  console.log(`\n=== RÉSULTAT FINAL: ${trades.length} trade(s) créé(s) ===`);
+  return trades;
+};
 
   // Traitement CSV standard (comme avant)
   const handleStandardCSVImport = async (csv) => {
