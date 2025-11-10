@@ -1,8 +1,43 @@
-node_modules/
-build/
+# See https://help.github.com/articles/ignoring-files/ for more about ignoring files.
+
+# dependencies
+/node_modules
+/.pnp
+.pnp.js
+
+# testing
+/coverage
+
+# production
+/build
+
+# misc
 .DS_Store
 .env.local
-.env
+.env.development.local
+.env.test.local
+.env.production.local
+
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
+yarn.lock
+package-lock.json
+
+# IDE
+.idea
+.vscode
+*.swp
+*.swo
+*.swn
+*.bak
+
+# OS
+Thumbs.db
+Desktop.ini
+
+# Trading data files (pour ne pas commit les données sensibles)
+*.data
+*.csv
+trading-data/
+backups/
