@@ -1,0 +1,193 @@
+╔═══════════════════════════════════════════════════════════════╗
+║                                                               ║
+║          TopMove Trading Journal - Application Web           ║
+║                                                               ║
+║              Journal de Trading Professionnel                ║
+║         avec Import Sierra Chart & Analytics                 ║
+║                                                               ║
+╚═══════════════════════════════════════════════════════════════╝
+
+📦 CONTENU DU PROJET
+═══════════════════════════════════════════════════════════════
+
+✅ Application Next.js 14 complète et fonctionnelle
+✅ Authentification (Email + OAuth Google)
+✅ Dashboard avec KPIs temps réel
+✅ Import Sierra Chart 100% opérationnel
+✅ Liste des trades avec recherche
+✅ Position Size Calculator fonctionnel
+✅ Gestion multi-comptes
+✅ Schéma Supabase complet
+
+
+🚀 DÉMARRAGE RAPIDE
+═══════════════════════════════════════════════════════════════
+
+1. Installer les dépendances :
+   npm install
+
+2. Configurer Supabase :
+   - Créer un projet sur supabase.com
+   - Exécuter supabase-schema.sql dans l'éditeur SQL
+   - Copier URL et ANON_KEY
+
+3. Créer .env.local :
+   NEXT_PUBLIC_SUPABASE_URL=https://xxx.supabase.co
+   NEXT_PUBLIC_SUPABASE_ANON_KEY=eyJxxx...
+   NEXT_PUBLIC_APP_URL=http://localhost:3000
+
+4. Lancer l'application :
+   npm run dev
+
+5. Ouvrir : http://localhost:3000
+
+
+📚 DOCUMENTATION
+═══════════════════════════════════════════════════════════════
+
+GUIDE_COMPLET.md      → Guide d'utilisation complet
+README.md             → Vue d'ensemble technique
+DEMARRAGE.md          → Instructions de démarrage
+MISE_A_JOUR.md        → Détails des fonctionnalités
+CHECKLIST_TEST.md     → Checklist de test complète
+
+
+✨ FONCTIONNALITÉS PRINCIPALES
+═══════════════════════════════════════════════════════════════
+
+✅ DASHBOARD
+   • KPIs : Capital, P&L jour/semaine, Win Rate
+   • Courbe d'équité interactive
+   • Trades récents
+   • Statistiques rapides
+
+✅ IMPORT SIERRA CHART
+   • Drag & Drop de fichiers .data
+   • Parsing automatique des trades OCO
+   • Détection Stop Loss & Take Profit
+   • Aperçu avant import
+   • Import sécurisé en base
+
+✅ TRADES
+   • Liste complète avec recherche
+   • Toutes les infos : Entry, Exit, SL, TP, P&L
+   • Couleurs profit/loss
+   • Export (à venir)
+
+✅ CALCULATOR
+   • Position sizing pour tous contrats futures
+   • MGC, ES, NQ, CL et 20+ autres
+   • Support micro-contrats
+   • Calcul marge et effet de levier
+
+✅ SETTINGS
+   • Création/gestion des comptes trading
+   • Profil utilisateur
+   • Statut abonnement
+
+
+🎯 CE QUI FONCTIONNE
+═══════════════════════════════════════════════════════════════
+
+✅ Authentification complète
+✅ Import fichiers Sierra Chart
+✅ Parsing des trades avec OCO
+✅ Calcul automatique des P&L
+✅ Dashboard avec graphiques
+✅ Position Size Calculator
+✅ Multi-comptes
+✅ Navigation responsive
+✅ Protection des routes
+
+
+🔜 À VENIR (Phase 3)
+═══════════════════════════════════════════════════════════════
+
+• Journal quotidien complet
+• Analytics avancées (heatmap, par setup)
+• Session Replay
+• Exports PDF
+• Intégration Stripe (abonnement 17.99€/mois)
+
+
+🧪 TESTER L'APPLICATION
+═══════════════════════════════════════════════════════════════
+
+1. S'inscrire (essai gratuit 14 jours)
+2. Créer un compte de trading (Settings)
+3. Importer un fichier Trade Activity Log
+   → Fichiers test fournis dans uploads/
+4. Voir les résultats dans Dashboard et Trades
+5. Utiliser le Calculator pour dimensionner
+
+
+📁 STRUCTURE
+═══════════════════════════════════════════════════════════════
+
+app/
+├── (dashboard)/          → Pages protégées
+│   ├── dashboard/        → Page principale
+│   ├── import/           → Import Sierra Chart
+│   ├── trades/           → Liste des trades
+│   ├── calculator/       → Position sizing
+│   └── settings/         → Paramètres
+├── auth/                 → Authentification
+└── page.tsx              → Landing page
+
+src/
+├── components/           → Composants React
+├── lib/                  → Logique métier
+│   ├── sierra-parser.ts  → Parser .data
+│   ├── futures-contracts.ts
+│   └── utils.ts
+└── types/                → Types TypeScript
+
+supabase-schema.sql       → Base de données complète
+
+
+🎨 STACK TECHNIQUE
+═══════════════════════════════════════════════════════════════
+
+• Next.js 14 (App Router)
+• React 18
+• TypeScript
+• Tailwind CSS
+• Supabase (Auth + Database)
+• Recharts (Graphiques)
+• Vercel (Déploiement)
+
+
+💡 CONSEILS
+═══════════════════════════════════════════════════════════════
+
+• Lire GUIDE_COMPLET.md pour la doc complète
+• Utiliser CHECKLIST_TEST.md pour tester
+• Les fichiers .data de test sont dans uploads/
+• Le parser gère automatiquement les OCO
+• Les trades sont liés à des comptes de trading
+• RLS activé : chaque user voit uniquement ses données
+
+
+⚠️ PRÉREQUIS
+═══════════════════════════════════════════════════════════════
+
+• Node.js 18+ 
+• npm ou yarn
+• Compte Supabase (gratuit)
+• Navigateur moderne
+
+
+📞 SUPPORT
+═══════════════════════════════════════════════════════════════
+
+Email : antonio@topmovetrading.fr
+Site : https://topmovetrading.fr
+
+
+═══════════════════════════════════════════════════════════════
+
+       Développé avec ❤️ pour TopMove Trading
+              Application Version 1.0
+           © 2025 TopMove Trading - Tous droits réservés
+
+═══════════════════════════════════════════════════════════════
