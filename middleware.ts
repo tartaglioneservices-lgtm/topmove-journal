@@ -11,7 +11,6 @@ export async function middleware(request: NextRequest) {
 
   if (!supabaseUrl || !supabaseAnonKey) {
     console.error('Missing Supabase environment variables')
-    // En production, si les variables manquent, on laisse passer (pour éviter le crash)
     return res
   }
 
@@ -23,17 +22,13 @@ export async function middleware(request: NextRequest) {
 
     const { pathname } = request.nextUrl
 
-    // Routes publiques (accessibles sans connexion)
-    const publicRoutes = [
-      '/',
-      '/auth/login',
-      '/auth/signup',
-      '/auth/callback',
-    ]
+    // Routes publiques
+    const publicRoutes = ['/', '/auth/login', '/auth/signup', '/auth/callback']
+    const isPublicRoute = publicRoutes.some(route => 
+      pathname === route || pathname.startsWith('/auth/')
+    )
 
-    const isPublicRoute = publicRoutes.some(route => pathname === route || pathname.startsWith('/auth/'))
-
-    // Si l'utilisateur n'est pas connecté et essaie d'accéder à une route protégée
+    // Redirection si pas connecté
     if (!session && !isPublicRoute) {
       const redirectUrl = request.nextUrl.clone()
       redirectUrl.pathname = '/auth/login'
@@ -41,7 +36,7 @@ export async function middleware(request: NextRequest) {
       return NextResponse.redirect(redirectUrl)
     }
 
-    // Si l'utilisateur est connecté et essaie d'accéder aux pages auth
+    // Redirection si connecté sur pages auth
     if (session && (pathname === '/auth/login' || pathname === '/auth/signup')) {
       const redirectUrl = request.nextUrl.clone()
       redirectUrl.pathname = '/dashboard'
@@ -51,31 +46,12 @@ export async function middleware(request: NextRequest) {
     return res
   } catch (error) {
     console.error('Middleware error:', error)
-    // En cas d'erreur, on laisse passer pour ne pas bloquer l'app
     return res
   }
 }
 
 export const config = {
   matcher: [
-    /*
-     * Match all request paths except for the ones starting with:
-     * - _next/static (static files)
-     * - _next/image (image optimization files)
-     * - favicon.ico (favicon file)
-     * - public folder
-     */
-    '/((?!_next/static|_next/image|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)',
+    '/((?!_next/static|_next/image|favicon.ico|assets).*)',
   ],
 }
-```
-
-### Étape 2 : Vérifier les variables d'environnement dans Vercel
-
-1. Va sur **Vercel** → ton projet
-2. **Settings** → **Environment Variables**
-3. Vérifie que tu as EXACTEMENT ces 3 variables (avec les bons noms) :
-```
-NEXT_PUBLIC_SUPABASE_URL
-NEXT_PUBLIC_SUPABASE_ANON_KEY
-NEXT_PUBLIC_APP_URL
